@@ -116,6 +116,58 @@ app.delete('/api/tokens/:id', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+let schedules = [
+  { id: 's-1', username: IS_ADMIN ? 'admin' : 'alice', template: 'standard',
+    notBefore: new Date(Date.now() + 18 * 3600e3).toISOString(), status: 'pending', createdAt: new Date().toISOString(), createdBy: 'alice' },
+];
+app.get('/api/my-schedules', (_req, res) => res.json(schedules));
+app.get('/api/schedules', (_req, res) => res.json(schedules));
+app.post('/api/my-schedules', (req, res) => {
+  const e = { id: 's-' + (schedules.length + 1), username: IS_ADMIN ? 'admin' : 'alice',
+    template: (req.body && req.body.template) || 'standard',
+    notBefore: (req.body && req.body.notBefore) || new Date(Date.now() + 3600e3).toISOString(),
+    status: 'pending', createdAt: new Date().toISOString(), createdBy: 'you' };
+  schedules.push(e);
+  res.status(201).json(e);
+});
+app.delete(['/api/my-schedules/:id', '/api/schedules/:id'], (req, res) => {
+  schedules = schedules.filter((s) => s.id !== req.params.id);
+  res.json({ status: 'ok' });
+});
+
+app.get('/api/usage', (_req, res) => res.json({
+  byUser: {
+    alice: { sessions: 12, minutes: 1440, cost: 12.0 },
+    bob: { sessions: 5, minutes: 420, cost: 3.5 },
+  },
+  total: { sessions: 17, minutes: 1860, cost: 15.5 },
+  costPerHour: 0.5, currency: 'EUR',
+}));
+
+app.post('/api/vms/bulk', (req, res) => {
+  const action = req.body && req.body.action;
+  if (action === 'deprovision-idle') { const n = vms.length; vms = []; return res.json({ action, count: n, results: [] }); }
+  res.json({ action, count: 0, results: [] });
+});
+
+app.get('/api/orphans', (_req, res) => res.json({
+  proxmox: [{ vmid: 950, name: 'deskforge-alt-950', status: 'stopped' }],
+  kasm: [{ server_id: 'srv-dead', name: 'deskforge-bob-77' }],
+  errors: {},
+}));
+
+app.post('/api/sessions/:id/disconnect', (req, res) => res.json({ status: 'ok', kasmId: req.params.id }));
+
+app.get('/api/users/:uid', (req, res) => {
+  const user = users.find((u) => u.uid === req.params.uid);
+  if (!user) return res.status(404).json({ error: 'Nutzer nicht gefunden' });
+  res.json({
+    user,
+    vm: req.params.uid === 'alice' ? pub(vms[0]) : null,
+    history: [{ vmid: 70, username: req.params.uid, assignedAt: new Date(Date.now() - 5 * 864e5).toISOString(), endedAt: new Date(Date.now() - 5 * 864e5 + 90 * 60e3).toISOString(), durationMinutes: 90, endedBy: 'system:idle' }],
+  });
+});
+
 app.get('/api/users', (_req, res) => res.json(users));
 app.get('/api/sessions', (_req, res) => res.json(sessions));
 app.get('/api/vms', (_req, res) => res.json(vms.map(pub)));

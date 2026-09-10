@@ -88,6 +88,15 @@ class KasmClient {
     const res = await this.client.post('/api/admin/get_kasms', this._auth());
     return res.data.kasms || res.data;
   }
+
+  // Beendet eine laufende Sitzung, OHNE den (persistenten) Server bzw.
+  // die VM zu löschen. user_id ist bei manchen Kasm-Versionen Pflicht -
+  // wird mitgeschickt, wenn vorhanden.
+  async destroySession(kasmId, userId) {
+    const body = { ...this._auth(), kasm_id: kasmId };
+    if (userId) body.user_id = userId;
+    await this.client.post('/api/admin/destroy_kasm', body);
+  }
 }
 
 module.exports = { KasmClient, REGISTRATION_TOKEN_FIELD_CANDIDATES };

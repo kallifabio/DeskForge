@@ -188,7 +188,7 @@ async function loadTemplates() {
     const { templates, quota } = await fetchJson('/api/templates');
     const opts = templates.map((t) =>
       `<option value="${esc(t.name)}"${t.default ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
-    for (const id of ['templateSelect', 'adminProvisionTemplate']) {
+    for (const id of ['templateSelect', 'adminProvisionTemplate', 'scheduleTemplate']) {
       const sel = el(id);
       if (sel) sel.innerHTML = opts;
     }
@@ -254,6 +254,48 @@ async function loadHistory() {
       : '<li class="text-slate-500">Noch keine Sitzungen.</li>';
   } catch (_) { /* Historie ist optional */ }
 }
+
+// ---- Geplante Anforderungen (Selbstbedienung) ----------------------
+
+async function loadMySchedules() {
+  try {
+    const rows = await fetchJson('/api/my-schedules');
+    const ul = el('scheduleList');
+    ul.innerHTML = rows.length
+      ? rows.map((s) => `
+          <li class="flex items-center gap-2">
+            <span>${esc(formatDate(s.notBefore))} · ${esc(s.template)} · <span class="${s.status === 'pending' ? 'text-amber-400' : s.status === 'done' ? 'text-emerald-400' : 'text-slate-500'}">${esc(s.status)}</span></span>
+            ${s.status === 'pending' ? `<button data-cancel-schedule="${esc(s.id)}" class="text-rose-400 hover:text-rose-300">stornieren</button>` : ''}
+          </li>`).join('')
+      : '<li class="text-slate-500">Keine Planungen.</li>';
+    ul.querySelectorAll('[data-cancel-schedule]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await fetchJson(`/api/my-schedules/${encodeURIComponent(btn.dataset.cancelSchedule)}`, { method: 'DELETE' });
+          loadMySchedules();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
+  } catch (_) { /* optional */ }
+}
+
+el('scheduleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const when = el('scheduleWhen').value;
+  if (!when) return;
+  try {
+    await fetchJson('/api/my-schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notBefore: new Date(when).toISOString(), template: el('scheduleTemplate').value || undefined }),
+    });
+    el('scheduleWhen').value = '';
+    loadMySchedules();
+  } catch (err) {
+    alert(err.message);
+  }
+});
 
 // ---- Ankündigungsbanner --------------------------------------
 
@@ -459,11 +501,97 @@ el('tokenForm').addEventListener('submit', async (e) => {
   }
 });
 
+// ---- Admin: Nutzung / Kosten ----------------------------
+
+async function loadUsage() {
+  const box = el('usageBox');
+  box.innerHTML = rowLoading ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Lädt...' : 'Lädt...';
+  try {
+    const u = await fetchJson('/api/usage');
+    const users = Object.entries(u.byUser).sort((a, b) => b[1].minutes - a[1].minutes);
+    const cost = (v) => (u.costPerHour ? ` · ${v.cost.toFixed(2)} ${esc(u.currency)}` : '');
+    box.innerHTML = `
+      <div class="mb-2 text-slate-300">Gesamt: ${u.total.sessions} Sitzungen · ${Math.round(u.total.minutes / 60)} Std.${u.costPerHour ? ` · ${u.total.cost.toFixed(2)} ${esc(u.currency)}` : ''}</div>
+      <table class="w-full">
+        <thead><tr class="text-slate-500 text-left"><th class="py-1 font-medium">Nutzer</th><th class="py-1 font-medium">Sitzungen</th><th class="py-1 font-medium">Stunden</th></tr></thead>
+        <tbody>${users.length ? users.map(([name, v]) =>
+          `<tr><td class="py-1">${esc(name)}</td><td class="py-1">${v.sessions}</td><td class="py-1">${(v.minutes / 60).toFixed(1)}${cost(v)}</td></tr>`
+        ).join('') : '<tr><td colspan="3" class="py-1 text-slate-500">Noch keine abgeschlossenen Sitzungen.</td></tr>'}</tbody>
+      </table>`;
+  } catch (err) {
+    box.textContent = err.message;
+  }
+}
+
+// ---- Admin: verwaiste Ressourcen -----------------------
+
+async function loadOrphans() {
+  const box = el('orphansBox');
+  box.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Prüfe...';
+  try {
+    const o = await fetchJson('/api/orphans');
+    const list = (arr, fmt) => arr.length ? '<ul class="list-disc ml-4">' + arr.map((x) => `<li>${fmt(x)}</li>`).join('') + '</ul>' : '<span class="text-slate-500">keine</span>';
+    box.innerHTML = `
+      <div class="mb-2">Proxmox-VMs ohne Eintrag: ${list(o.proxmox, (v) => `${esc(v.vmid)} (${esc(v.name)}, ${esc(v.status)})`)}</div>
+      <div>Kasm-Server ohne VM: ${list(o.kasm, (s) => `${esc(s.name || s.server_id)}`)}</div>
+      ${o.errors && (o.errors.proxmox || o.errors.kasm) ? `<div class="text-amber-400 text-xs mt-2">Teilprüfung fehlgeschlagen: ${esc(o.errors.proxmox || '')} ${esc(o.errors.kasm || '')}</div>` : ''}`;
+  } catch (err) {
+    box.textContent = err.message;
+  }
+}
+
+// ---- Admin: Nutzer-Detail -----------------------------
+
+async function loadUserDetail(uid) {
+  const box = el('userDetail');
+  box.hidden = false;
+  box.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Lädt...';
+  try {
+    const d = await fetchJson(`/api/users/${encodeURIComponent(uid)}`);
+    const vm = d.vm
+      ? `VM ${esc(d.vm.vmid)} (${esc(d.vm.status)}, IP ${esc(d.vm.ip || '-')}, Typ ${esc(d.vm.template || 'standard')})`
+      : 'keine aktive VM';
+    const hist = (d.history || []).slice(0, 5)
+      .map((h) => `<li>${esc(formatDate(h.assignedAt))} · ${esc(h.durationMinutes)} Min.</li>`).join('') || '<li class="text-slate-500">keine</li>';
+    box.innerHTML = `
+      <div class="flex items-center justify-between">
+        <strong class="text-slate-200">${esc(d.user.name || d.user.uid)}</strong>
+        <button id="userDetailClose" class="text-slate-500 hover:text-slate-300 text-xs">schließen</button>
+      </div>
+      <div>${esc(d.user.uid)} · ${esc(d.user.email || '')}</div>
+      <div class="mt-1">Aktuell: ${vm}</div>
+      <div class="mt-1">Letzte Sitzungen:</div>
+      <ul class="list-disc ml-4 text-xs">${hist}</ul>`;
+    el('userDetailClose').addEventListener('click', () => { box.hidden = true; });
+  } catch (err) {
+    box.innerHTML = `<span class="text-rose-400">${esc(err.message)}</span>`;
+  }
+}
+
+el('bulkIdleBtn').addEventListener('click', async () => {
+  if (!confirm('Alle VMs ohne aktive Kasm-Sitzung jetzt abbauen?')) return;
+  const btn = el('bulkIdleBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetchJson('/api/vms/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deprovision-idle' }),
+    });
+    setVmsStatus(`${r.count} VM(s) abgebaut.`);
+    loadVms();
+  } catch (err) {
+    setVmsStatus(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ---- Admin: Tabellen (Nutzer / Sitzungen / VMs) -----
 
 const tables = {
   users: { rows: [], filter: '', sort: null, dir: 1, cols: 3 },
-  sessions: { rows: [], filter: '', sort: null, dir: 1, cols: 3 },
+  sessions: { rows: [], filter: '', sort: null, dir: 1, cols: 4 },
   vms: { rows: [], filter: '', sort: null, dir: 1, cols: 6 },
 };
 
@@ -487,12 +615,34 @@ function renderTable(name) {
 
   if (name === 'users') {
     tbody.innerHTML = rows.map((u) => `
-      <tr><td class="py-2">${esc(u.uid)}</td><td class="py-2">${esc(u.name)}</td>
-      <td class="py-2 text-slate-400">${esc(u.email)}</td></tr>`).join('');
+      <tr>
+        <td class="py-2"><button data-user-detail="${esc(u.uid)}" class="text-indigo-400 hover:text-indigo-300">${esc(u.uid)}</button></td>
+        <td class="py-2">${esc(u.name)}</td>
+        <td class="py-2 text-slate-400">${esc(u.email)}</td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-user-detail]').forEach((btn) => {
+      btn.addEventListener('click', () => loadUserDetail(btn.dataset.userDetail));
+    });
   } else if (name === 'sessions') {
     tbody.innerHTML = rows.map((s) => `
-      <tr><td class="py-2">${esc(s.kasm_id)}</td><td class="py-2">${esc(s.user)}</td>
-      <td class="py-2 text-slate-400">${esc(s.status)}</td></tr>`).join('');
+      <tr>
+        <td class="py-2">${esc(s.kasm_id)}</td>
+        <td class="py-2">${esc(s.user)}</td>
+        <td class="py-2 text-slate-400">${esc(s.status)}</td>
+        <td class="py-2 text-right">
+          ${s.kasm_id ? `<button data-disconnect="${esc(s.kasm_id)}" class="text-amber-400 hover:text-amber-300 text-xs inline-flex items-center gap-1"><i class="fa-solid fa-plug-circle-xmark"></i> Trennen</button>` : ''}
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-disconnect]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Sitzung trennen? Die VM bleibt bestehen, der Nutzer kann sich neu verbinden.')) return;
+        btn.disabled = true;
+        try {
+          await fetchJson(`/api/sessions/${encodeURIComponent(btn.dataset.disconnect)}/disconnect`, { method: 'POST' });
+          loadSessions();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
   } else {
     tbody.innerHTML = rows.map((vm) => `
       <tr>
@@ -594,7 +744,14 @@ document.querySelectorAll('table[data-table] th[data-sort]').forEach((th) => {
 document.querySelectorAll('[data-refresh]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.refresh;
-    ({ users: loadUsers, sessions: loadSessions, vms: loadVms, audit: () => loadAudit(true) }[target] || (() => {}))();
+    ({
+      users: loadUsers,
+      sessions: loadSessions,
+      vms: loadVms,
+      audit: () => loadAudit(true),
+      usage: loadUsage,
+      orphans: loadOrphans,
+    }[target] || (() => {}))();
   });
 });
 
@@ -709,6 +866,7 @@ async function init() {
   await refreshMyVmOnce();
   loadHistory();
   loadTemplates();
+  loadMySchedules();
 
   if (currentUser.isAdmin) {
     el('adminSections').hidden = false;
@@ -719,6 +877,7 @@ async function init() {
     loadAnnounceEditor();
     loadAudit(true);
     loadTokens();
+    loadUsage();
   }
 
   startEventStream();

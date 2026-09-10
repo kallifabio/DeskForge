@@ -104,6 +104,20 @@
         <summary class="cursor-pointer text-slate-400 hover:text-slate-300">Meine letzten Sitzungen</summary>
         <ul id="historyList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
       </details>
+
+      <details id="scheduleBox" class="mt-2 text-sm">
+        <summary class="cursor-pointer text-slate-400 hover:text-slate-300">Sitzung planen</summary>
+        <form id="scheduleForm" class="mt-2 flex flex-wrap gap-2 items-center">
+          <input id="scheduleWhen" type="datetime-local"
+                 class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <select id="scheduleTemplate"
+                  class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+            <i class="fa-solid fa-calendar-plus"></i> Planen
+          </button>
+        </form>
+        <ul id="scheduleList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
+      </details>
     </section>
 
     <!-- Admin -->
@@ -166,6 +180,32 @@
         </section>
       </div>
 
+      <div class="grid gap-6 md:grid-cols-2">
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+              <i class="fa-solid fa-coins"></i> Nutzung &amp; Kosten
+            </h2>
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="usage">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+          </div>
+          <div id="usageBox" class="text-sm text-slate-400">Lädt...</div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+              <i class="fa-solid fa-ghost"></i> Verwaiste Ressourcen
+            </h2>
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="orphans">
+              <i class="fa-solid fa-arrows-rotate"></i> Prüfen
+            </button>
+          </div>
+          <div id="orphansBox" class="text-sm text-slate-400">Noch nicht geprüft.</div>
+        </section>
+      </div>
+
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
           <i class="fa-solid fa-user-shield"></i> Für Nutzer bereitstellen
@@ -207,6 +247,7 @@
             <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
           </table>
         </div>
+        <div id="userDetail" hidden class="mt-4 border-t border-slate-800 pt-4 text-sm text-slate-400"></div>
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -229,6 +270,7 @@
                 <th scope="col" class="py-2 font-medium" data-sort="kasm_id">Kasm-ID</th>
                 <th scope="col" class="py-2 font-medium" data-sort="user">Nutzer</th>
                 <th scope="col" class="py-2 font-medium" data-sort="status">Status</th>
+                <th scope="col" class="py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
@@ -242,6 +284,9 @@
             <i class="fa-solid fa-server"></i> Zugewiesene VMs (Proxmox)
           </h2>
           <div class="flex items-center gap-2">
+            <button id="bulkIdleBtn" class="text-amber-400 hover:text-amber-300 text-sm inline-flex items-center gap-1.5">
+              <i class="fa-solid fa-broom"></i> Alle Idle abbauen
+            </button>
             <input data-filter="vms" type="search" placeholder="Filtern..."
                    class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">

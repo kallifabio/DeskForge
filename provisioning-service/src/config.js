@@ -51,6 +51,14 @@ const schema = z.object({
   // Kontingent (gleichzeitige VMs pro Nutzer), wenn access.json fehlt
   // oder keine passende Gruppenregel greift.
   DEFAULT_MAX_CONCURRENT: z.coerce.number().int().min(1).default(1),
+
+  // Für die Kosten-/Nutzungsansicht (VM-Stunden * Satz). 0 = keine
+  // Kostenspalte.
+  COST_PER_VM_HOUR: z.coerce.number().min(0).default(0),
+  COST_CURRENCY: z.string().default('EUR'),
+
+  // Geplante Anforderungen (siehe src/jobs/scheduleRunner.js).
+  SCHEDULE_CHECK_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -105,4 +113,7 @@ module.exports = {
   stateFilePath: env.STATE_FILE_PATH,
   accessFilePath: env.ACCESS_FILE_PATH,
   defaultMaxConcurrent: env.DEFAULT_MAX_CONCURRENT,
+  costPerVmHour: env.COST_PER_VM_HOUR,
+  costCurrency: env.COST_CURRENCY,
+  scheduleCheckIntervalMs: env.SCHEDULE_CHECK_INTERVAL_MS,
 };

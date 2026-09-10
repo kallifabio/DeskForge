@@ -80,6 +80,12 @@ class ProxmoxClient {
     return res.data.data;
   }
 
+  // Alle QEMU-VMs auf dem Node (für die Orphan-Erkennung).
+  async listVms() {
+    const res = await this.client.get(`/nodes/${this.node}/qemu`);
+    return res.data.data || [];
+  }
+
   // Weicher Neustart des Gasts (ACPI/Guest-Agent). Nutzt den
   // reboot-Endpunkt statt stop+start, damit Windows sauber herunterfährt.
   async rebootVm(vmid) {

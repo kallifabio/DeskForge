@@ -341,6 +341,114 @@ app.delete('/api/tokens/:id', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// ---- Geplante Anforderungen (Selbstbedienung) ----------------------
+
+app.get('/api/my-schedules', requireAuth, async (req, res) => {
+  try {
+    res.json(await provisioning.mySchedules(req.session.user.username));
+  } catch (err) {
+    res.status(502).json({ error: `Planungen nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.post('/api/my-schedules', requireAuth, async (req, res) => {
+  const { template, notBefore } = req.body || {};
+  try {
+    res.status(201).json(
+      await provisioning.createSchedule(
+        { username: req.session.user.username, template, notBefore },
+        req.session.user.username
+      )
+    );
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.delete('/api/my-schedules/:id', requireAuth, async (req, res) => {
+  try {
+    // Nur eigene Planungen stornieren dürfen.
+    const mine = await provisioning.mySchedules(req.session.user.username);
+    if (!mine.some((s) => s.id === req.params.id)) {
+      return res.status(404).json({ error: 'Planung nicht gefunden' });
+    }
+    res.json(await provisioning.deleteSchedule(req.params.id, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+// ---- Admin: Planungen, Nutzung, Sammelaktionen, Orphans -----------
+
+app.get('/api/schedules', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.listSchedules());
+  } catch (err) {
+    res.status(502).json({ error: `Planungen nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.delete('/api/schedules/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.deleteSchedule(req.params.id, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.get('/api/usage', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.usage({ from: req.query.from, to: req.query.to }));
+  } catch (err) {
+    res.status(502).json({ error: `Nutzung nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.post('/api/vms/bulk', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.bulkVms(req.body || {}, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.get('/api/orphans', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.orphans());
+  } catch (err) {
+    res.status(502).json({ error: `Orphan-Prüfung fehlgeschlagen: ${err.message}` });
+  }
+});
+
+app.post('/api/sessions/:id/disconnect', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.disconnectSession(req.params.id, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.get('/api/users/:uid', requireAuth, requireAdmin, async (req, res) => {
+  const uid = req.params.uid;
+  try {
+    const [users, vm, history] = await Promise.all([
+      ldap.listUsers(config),
+      provisioning.getMyVm(uid).catch(() => null),
+      provisioning.myHistory(uid).catch(() => []),
+    ]);
+    const user = users.find((u) => u.uid === uid) || null;
+    if (!user) return res.status(404).json({ error: 'Nutzer nicht gefunden' });
+    res.json({ user, vm, history });
+  } catch (err) {
+    res.status(502).json({ error: `Nutzerdetails nicht abrufbar: ${err.message}` });
+  }
+});
+
 app.use(notFound);
 app.use(buildErrorHandler(logger));
 

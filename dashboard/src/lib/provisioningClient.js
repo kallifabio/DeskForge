@@ -142,6 +142,44 @@ async function deleteToken(id, actor) {
   return res.data;
 }
 
+// ---- Geplante Anforderungen -------------------------------------
+
+async function mySchedules(username) {
+  const res = await client.get(`/schedules/${enc(username)}`);
+  return res.data;
+}
+async function listSchedules() {
+  const res = await client.get('/schedules');
+  return res.data;
+}
+async function createSchedule({ username, template, notBefore }, actor) {
+  const res = await client.post('/schedules', { username, template, notBefore }, actorHeader(actor));
+  return res.data;
+}
+async function deleteSchedule(id, actor) {
+  const res = await client.delete(`/schedules/${enc(id)}`, actorHeader(actor));
+  return res.data;
+}
+
+// ---- Nutzung, Sammelaktionen, Orphans, Sitzung trennen ---------
+
+async function usage(params) {
+  const res = await client.get('/usage', { params });
+  return res.data;
+}
+async function bulkVms(body, actor) {
+  const res = await client.post('/vms/bulk', body, actorHeader(actor));
+  return res.data;
+}
+async function orphans() {
+  const res = await client.get('/orphans');
+  return res.data;
+}
+async function disconnectSession(kasmId, actor) {
+  const res = await client.post(`/sessions/${enc(kasmId)}/disconnect`, null, actorHeader(actor));
+  return res.data;
+}
+
 module.exports = {
   requestVm,
   listTemplates,
@@ -162,4 +200,12 @@ module.exports = {
   listTokens,
   createToken,
   deleteToken,
+  mySchedules,
+  listSchedules,
+  createSchedule,
+  deleteSchedule,
+  usage,
+  bulkVms,
+  orphans,
+  disconnectSession,
 };

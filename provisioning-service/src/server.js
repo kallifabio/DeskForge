@@ -14,8 +14,10 @@ const { buildRouter: buildProvisionRouter } = require('./routes/provision');
 const { buildRouter: buildVmsRouter } = require('./routes/vms');
 const { buildRouter: buildSessionsRouter } = require('./routes/sessions');
 const { buildRouter: buildTokensRouter } = require('./routes/tokens');
+const { buildRouter: buildSchedulesRouter } = require('./routes/schedules');
 const { startPoolMaintainer } = require('./jobs/poolMaintainer');
 const { startIdleReaper } = require('./jobs/idleReaper');
+const { startScheduleRunner } = require('./jobs/scheduleRunner');
 
 function createApp() {
   const store = new StateStore(config.stateFilePath, logger);
@@ -36,13 +38,15 @@ function createApp() {
 
   app.use(buildProvisionRouter({ store, proxmox, kasm, mutex, config, logger, access }));
   app.use(buildVmsRouter({ store, proxmox, kasm, config, logger, access }));
-  app.use(buildSessionsRouter({ kasm, config }));
+  app.use(buildSessionsRouter({ kasm, config, logger }));
   app.use(buildTokensRouter({ store, config }));
+  app.use(buildSchedulesRouter({ store, config, logger, access }));
 
   const poolInterval = startPoolMaintainer({ store, proxmox, mutex, config, logger });
   const idleInterval = startIdleReaper({ store, proxmox, kasm, config, logger });
+  const scheduleInterval = startScheduleRunner({ store, config, logger });
 
-  return { app, poolInterval, idleInterval };
+  return { app, poolInterval, idleInterval, scheduleInterval };
 }
 
 if (require.main === module) {

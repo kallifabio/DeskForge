@@ -40,7 +40,7 @@ function withServer(fn) {
     }
 
     const { createApp } = require('../src/server');
-    const { app, poolInterval, idleInterval } = createApp();
+    const { app, poolInterval, idleInterval, scheduleInterval } = createApp();
     const server = app.listen(0);
     const port = server.address().port;
     const baseUrl = `http://127.0.0.1:${port}`;
@@ -50,6 +50,7 @@ function withServer(fn) {
     } finally {
       clearInterval(poolInterval);
       clearInterval(idleInterval);
+      clearInterval(scheduleInterval);
       await new Promise((resolve) => server.close(resolve));
       for (const key of Object.keys(VALID_ENV)) {
         if (original[key] === undefined) delete process.env[key];
@@ -244,6 +245,88 @@ test('POST /provision mit unbekanntem Template -> 400 (vor jedem Proxmox-Aufruf)
   });
   assert.equal(res.status, 400);
   assert.match((await res.json()).error, /Unbekanntes VM-Template/);
+}));
+
+// ---- Phase 2b: Schedules, Usage, Bulk, Orphans, Disconnect --------
+
+test('GET /schedules ist leer; POST legt an; DELETE storniert', withServer(async ({ baseUrl }) => {
+  let res = await fetch(`${baseUrl}/schedules`, { headers: KEY });
+  assert.deepEqual(await res.json(), []);
+
+  const soon = new Date(Date.now() + 3600e3).toISOString();
+  res = await fetch(`${baseUrl}/schedules`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'alice', notBefore: soon }),
+  });
+  assert.equal(res.status, 201);
+  const created = await res.json();
+  assert.equal(created.status, 'pending');
+  assert.equal(created.template, 'standard');
+
+  res = await fetch(`${baseUrl}/schedules`, { headers: KEY });
+  assert.equal((await res.json()).length, 1);
+
+  res = await fetch(`${baseUrl}/schedules/${created.id}`, { method: 'DELETE', headers: KEY });
+  assert.equal(res.status, 200);
+  // Eintrag bleibt (Status "cancelled"), erneutes Stornieren -> 409
+  res = await fetch(`${baseUrl}/schedules/${created.id}`, { method: 'DELETE', headers: KEY });
+  assert.equal(res.status, 409);
+  res = await fetch(`${baseUrl}/schedules/does-not-exist`, { method: 'DELETE', headers: KEY });
+  assert.equal(res.status, 404);
+}));
+
+test('POST /schedules lehnt Vergangenheit und unbekanntes Template ab', withServer(async ({ baseUrl }) => {
+  let res = await fetch(`${baseUrl}/schedules`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'a', notBefore: '2000-01-01T00:00:00Z' }),
+  });
+  assert.equal(res.status, 400);
+  res = await fetch(`${baseUrl}/schedules`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'a', notBefore: new Date(Date.now() + 3600e3).toISOString(), template: 'xxl' }),
+  });
+  assert.equal(res.status, 400);
+}));
+
+test('GET /usage aggregiert (leer -> Nullen, costPerHour 0)', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/usage`, { headers: KEY });
+  assert.equal(res.status, 200);
+  const u = await res.json();
+  assert.deepEqual(u.byUser, {});
+  assert.deepEqual(u.total, { sessions: 0, minutes: 0, cost: 0 });
+  assert.equal(u.costPerHour, 0);
+}));
+
+test('POST /vms/bulk validiert action', withServer(async ({ baseUrl }) => {
+  let res = await fetch(`${baseUrl}/vms/bulk`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'quatsch' }),
+  });
+  assert.equal(res.status, 400);
+  res = await fetch(`${baseUrl}/vms/bulk`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'deprovision-user' }),
+  });
+  assert.equal(res.status, 400);
+  res = await fetch(`${baseUrl}/vms/bulk`, {
+    method: 'POST', headers: { ...KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'deprovision-idle' }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).count, 0);
+}));
+
+test('GET /orphans degradiert sauber (Proxmox/Kasm nicht erreichbar)', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/orphans`, { headers: KEY });
+  assert.equal(res.status, 200);
+  const o = await res.json();
+  assert.deepEqual(o.proxmox, []);
+  assert.deepEqual(o.kasm, []);
+  assert.ok(o.errors.proxmox && o.errors.kasm);
+}));
+
+test('POST /sessions/:id/disconnect: Auth ok, scheitert erst an Kasm (502)', withServer(async ({ baseUrl }) => {
+  const noAuth = await fetch(`${baseUrl}/sessions/abc/disconnect`, { method: 'POST' });
+  assert.equal(noAuth.status, 401);
+  const res = await fetch(`${baseUrl}/sessions/abc/disconnect`, { method: 'POST', headers: KEY });
+  assert.equal(res.status, 502);
 }));
 
 test('API-Token: anlegen, auflisten (ohne Hash), Bearer akzeptiert, widerrufen', withServer(async ({ baseUrl }) => {

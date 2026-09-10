@@ -21,6 +21,8 @@
 const express = require('express');
 const { requireApiKey } = require('../../../shared/apiKeyAuth');
 const { parseGroupsHeader } = require('../access');
+const { deprovisionVm } = require('../vmLifecycle');
+const { isSessionActive } = require('../jobs/idleReaper');
 const {
   toPublicVm,
   auditEntry,
@@ -240,6 +242,95 @@ function buildRouter({ store, proxmox, kasm, config, logger, access }) {
       })
     );
     res.json({ target: parsed.value.size, override: parsed.value.size, configured: config.pool.size });
+  });
+
+  // ---- Nutzung / Kosten -------------------------------------
+
+  router.get('/usage', (req, res) => {
+    const history = store.read().history;
+    const from = req.query.from ? Date.parse(req.query.from) : null;
+    const to = req.query.to ? Date.parse(req.query.to) : null;
+    const rate = config.costPerVmHour || 0;
+
+    const byUser = {};
+    let totMin = 0;
+    let totSessions = 0;
+    for (const h of history) {
+      const end = Date.parse(h.endedAt);
+      if (from && end < from) continue;
+      if (to && end > to) continue;
+      const u = (byUser[h.username] = byUser[h.username] || { sessions: 0, minutes: 0, cost: 0 });
+      u.sessions += 1;
+      u.minutes += h.durationMinutes || 0;
+      u.cost = +((u.minutes / 60) * rate).toFixed(2);
+      totMin += h.durationMinutes || 0;
+      totSessions += 1;
+    }
+    res.json({
+      byUser,
+      total: { sessions: totSessions, minutes: totMin, cost: +((totMin / 60) * rate).toFixed(2) },
+      costPerHour: rate,
+      currency: config.costCurrency || 'EUR',
+    });
+  });
+
+  // ---- Sammelaktionen --------------------------------------
+
+  router.post('/vms/bulk', async (req, res) => {
+    const { action, username } = req.body || {};
+    const assigned = Object.values(store.read().vms).filter((v) => v.status === 'assigned');
+    let targets = [];
+
+    if (action === 'deprovision-user') {
+      if (!username) return res.status(400).json({ error: 'username erforderlich' });
+      targets = assigned.filter((v) => v.username === username);
+    } else if (action === 'deprovision-idle') {
+      for (const vm of assigned) {
+        const active = await isSessionActive({ kasm, vm, logger });
+        if (!active) targets.push(vm);
+      }
+    } else {
+      return res.status(400).json({ error: 'action muss "deprovision-idle" oder "deprovision-user" sein' });
+    }
+
+    const results = [];
+    for (const vm of targets) {
+      try {
+        await deprovisionVm({ store, proxmox, kasm, logger, vmid: vm.vmid, actor: req.get('X-Actor') || 'admin:bulk' });
+        results.push({ vmid: vm.vmid, ok: true });
+      } catch (err) {
+        results.push({ vmid: vm.vmid, ok: false, error: err.message });
+      }
+    }
+    res.json({ action, count: results.length, results });
+  });
+
+  // ---- Verwaiste Ressourcen ------------------------------
+
+  router.get('/orphans', async (_req, res) => {
+    const known = new Set(Object.keys(store.read().vms).map(String));
+    const knownKasm = new Set(
+      Object.values(store.read().vms).map((v) => v.kasmServerId).filter(Boolean)
+    );
+    const out = { proxmox: [], kasm: [], errors: {} };
+
+    try {
+      const vms = await proxmox.listVms();
+      out.proxmox = vms
+        .filter((v) => /^deskforge-/i.test(v.name || '') && !known.has(String(v.vmid)))
+        .map((v) => ({ vmid: v.vmid, name: v.name, status: v.status }));
+    } catch (err) {
+      out.errors.proxmox = err.message;
+    }
+    try {
+      const servers = await kasm.getServers();
+      out.kasm = (servers || [])
+        .filter((s) => /^deskforge-/i.test(s.server_name || s.friendly_name || '') && !knownKasm.has(s.server_id))
+        .map((s) => ({ server_id: s.server_id, name: s.server_name || s.friendly_name }));
+    } catch (err) {
+      out.errors.kasm = err.message;
+    }
+    res.json(out);
   });
 
   // ---- Ankündigungsbanner -----------------------------------
