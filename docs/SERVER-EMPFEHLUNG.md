@@ -93,7 +93,7 @@ flowchart TD
     Q4 --> R4[["AX162 (EPYC)<br/>oder mehrere AX102 im Verbund"]]
 
     R1 -.- N1{{kein ECC -<br/>nur zum Ausprobieren}}
-    R3 -.- N3{{Sweet Spot fuer<br/>die meisten Teams}}
+    R3 -.- N3{{Sweet Spot für<br/>die meisten Teams}}
 ```
 
 ---

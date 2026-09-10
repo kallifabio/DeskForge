@@ -1,6 +1,6 @@
 // dev-server.js
 //
-// NUR fuer die lokale Vorschau der Oberflaeche gedacht - NICHT fuer den
+// NUR für die lokale Vorschau der Oberfläche gedacht - NICHT für den
 // Produktivbetrieb. Liefert das Frontend aus src/public aus und
 // beantwortet alle /api/*-Aufrufe (inkl. SSE /api/events) mit erfundenen
 // Beispieldaten, damit man das Dashboard ohne Authentik-SSO, LDAP und
@@ -9,7 +9,7 @@
 // Start:  node dev-server.js            (Admin-Ansicht, Standard)
 //         ROLE=user node dev-server.js  (nur Selbstbedienungs-Ansicht)
 //
-// Danach http://localhost:5000 oeffnen.
+// Danach http://localhost:5000 öffnen.
 
 const path = require('path');
 const express = require('express');
@@ -93,7 +93,7 @@ app.put('/api/announcement', (req, res) => {
 
 app.get('/api/templates', (_req, res) => res.json({
   templates: [
-    { name: 'standard', label: 'Standard (Buero)', default: true },
+    { name: 'standard', label: 'Standard (Büro)', default: true },
     { name: 'dev', label: 'Entwicklung (mehr RAM)', default: false },
   ],
   quota: IS_ADMIN ? 10 : 2,
