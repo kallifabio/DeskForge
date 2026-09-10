@@ -1,0 +1,44 @@
+# Abhängigkeiten
+node_modules/
+
+# Umgebungsvariablen / Secrets (.env.example bleibt versioniert)
+.env
+.env.local
+.env.*.local
+
+# Interne CA - private Schlüssel und ausgestellte Zertifikate nie committen
+ca/ca-output/
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Laufzeit-/Statusdaten des Provisioning-Service
+provisioning-service/data/*
+!provisioning-service/data/README.md
+
+# Docker-Volumes / lokale Daten
+infra-docker/data/
+infra-docker/volumes/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Betriebssystem / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporär
+*.tmp
+*.bak
+scratchpad/

@@ -1,0 +1,17 @@
+# Standard: Git entscheidet über Normalisierung, Checkout mit OS-Zeilenenden
+* text=auto
+
+# Skripte, die auf Linux laufen, immer mit LF (sonst brechen sie im Container/Server)
+*.sh text eol=lf
+*.bash text eol=lf
+Dockerfile text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# PowerShell-Skripte mit CRLF
+*.ps1 text eol=crlf
+
+# Binärdateien nicht anfassen
+*.woff2 binary
+*.png binary
+*.jpg binary
+*.ico binary

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="DeskForge - Verwaltung von VDI-Sitzungen" />
+  <title>DeskForge</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234f46e5'/%3E%3Crect x='3' y='4' width='10' height='6.5' rx='1' fill='white'/%3E%3Crect x='6' y='11.5' width='4' height='1.5' rx='.5' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="tailwind.css" />
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+    <h1 class="text-lg font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-display text-indigo-400"></i>
+      DeskForge
+    </h1>
+    <div class="flex items-center gap-4 text-sm text-slate-400">
+      <span id="whoami" class="flex items-center gap-2"></span>
+      <a href="/auth/logout" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
+        <i class="fa-solid fa-right-from-bracket"></i> Abmelden
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-6 grid gap-6">
+
+    <!-- Ladezustand beim ersten Aufruf -->
+    <div id="appLoading" class="text-sm text-slate-400 flex items-center gap-2">
+      <i class="fa-solid fa-spinner fa-spin"></i> Dashboard wird geladen...
+    </div>
+
+    <!-- Sichtbar nur bei einem echten Fehler (kein 401) -->
+    <div id="appError" hidden class="bg-rose-950 border border-rose-800 text-rose-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span id="appErrorText"></span>
+    </div>
+
+    <!-- Selbstbedienung: für jeden angemeldeten Nutzer sichtbar -->
+    <section id="selfService" hidden class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+      <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+        <i class="fa-solid fa-desktop"></i> Meine VDI-Sitzung
+      </h2>
+      <div id="myVmStatus" class="text-sm text-slate-400 mb-3">Lädt...</div>
+      <div class="flex gap-3">
+        <button id="requestVmBtn" hidden class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-plus"></i> VM anfordern
+        </button>
+        <button id="stopVmBtn" hidden class="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-power-off"></i> Sitzung beenden
+        </button>
+      </div>
+    </section>
+
+    <!-- Ab hier nur für Mitglieder der Admin-Gruppe sichtbar -->
+    <div id="adminSections" hidden class="grid gap-6">
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-user-shield"></i> Für Nutzer bereitstellen
+        </h2>
+        <form id="adminProvisionForm" class="flex gap-3">
+          <input id="adminProvisionUsername" type="text" placeholder="Benutzer-ID (z.B. alice)"
+                 class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+            <i class="fa-solid fa-plus"></i> Anfordern
+          </button>
+        </form>
+        <p id="adminProvisionStatus" class="text-sm text-slate-400 mt-3"></p>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-users"></i> Nutzer (LDAP)
+          </h2>
+          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="users">
+            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+          </button>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 text-left border-b border-slate-800">
+              <th scope="col" class="py-2 font-medium">Benutzer-ID</th>
+              <th scope="col" class="py-2 font-medium">Name</th>
+              <th scope="col" class="py-2 font-medium">E-Mail</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-desktop"></i> Aktive Sitzungen (Kasm)
+          </h2>
+          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="sessions">
+            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+          </button>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 text-left border-b border-slate-800">
+              <th scope="col" class="py-2 font-medium">Kasm-ID</th>
+              <th scope="col" class="py-2 font-medium">Nutzer</th>
+              <th scope="col" class="py-2 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
+        </table>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-server"></i> Zugewiesene VMs (Proxmox)
+          </h2>
+          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">
+            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+          </button>
+        </div>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 text-left border-b border-slate-800">
+              <th scope="col" class="py-2 font-medium">VMID</th>
+              <th scope="col" class="py-2 font-medium">Nutzer</th>
+              <th scope="col" class="py-2 font-medium">IP</th>
+              <th scope="col" class="py-2 font-medium">Zugewiesen seit</th>
+              <th scope="col" class="py-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody id="vmsTableBody" class="divide-y divide-slate-800"></tbody>
+        </table>
+        <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
+      </section>
+
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

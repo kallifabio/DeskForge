@@ -1,0 +1,157 @@
+# docker-compose.yml
+#
+# Basis-Stack: OpenLDAP (zentrales Benutzerverzeichnis) + Authentik
+# (Single Sign-on / OIDC Identity Provider).
+#
+# Kasm Workspaces und Proxmox VE werden hier bewusst NICHT containerisiert:
+# Kasm bringt einen eigenen offiziellen Installer mit, der auf einem
+# dedizierten Host läuft (Docker-in-Docker-Setups für Kasm selbst sind
+# nicht offiziell unterstützt), und Proxmox VE ist ein Hypervisor-Host,
+# kein Container. Siehe docs/SETUP.md für die vollständige Einrichtung.
+#
+# Hinweis: Aktuelle Authentik-Releases benötigen keinen separaten
+# Redis-Container mehr (Stand 2026) - daher taucht hier bewusst keiner auf.
+# Vor dem produktiven Einsatz trotzdem kurz gegen die aktuelle Dokumentation
+# unter https://docs.goauthentik.io/install-config/install/docker-compose/
+# prüfen, falls sich das mit einer neueren Version wieder ändert.
+
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: deskforge-openldap
+    restart: unless-stopped
+    environment:
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION}
+      LDAP_DOMAIN: ${LDAP_DOMAIN}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ca.crt
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+      - ../ca/ca-output/certs/openldap/openldap.crt:/container/service/slapd/assets/certs/ldap.crt:ro
+      - ../ca/ca-output/certs/openldap/openldap.key:/container/service/slapd/assets/certs/ldap.key:ro
+      - ${CA_CERT_PATH}:/container/service/slapd/assets/certs/ca.crt:ro
+    ports:
+      - "389:389"
+      - "636:636"
+
+  postgresql:
+    image: postgres:16-alpine
+    container_name: deskforge-authentik-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${PG_PASS}
+    volumes:
+      - authentik_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    container_name: deskforge-authentik-server
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # Interne CA in den Container-Trust-Store legen (siehe docs/SETUP.md
+      # für den update-ca-certificates-Schritt bzw. die Alternative über
+      # die "System Certificates" in der Authentik-Weboberfläche).
+      - ${CA_CERT_PATH}:/usr/local/share/ca-certificates/internal-deskforge-ca.crt:ro
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    container_name: deskforge-authentik-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      - ${CA_CERT_PATH}:/usr/local/share/ca-certificates/internal-deskforge-ca.crt:ro
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  # Profil-Share für FSLogix (siehe docs/FSLOGIX-PROFILE-CONTAINERS.md).
+  # HINWEIS: Samba emuliert NTFS-ACLs nur eingeschränkt. Für den
+  # produktiven Einsatz ist ein "echter" Windows-Dateiserver oder Azure
+  # Files mit nativen NTFS-Rechten die von Microsoft empfohlene, robustere
+  # Variante - dieser Samba-Dienst ist die pragmatische, selbst gehostete
+  # Alternative für Homelab-/Kleinteam-Szenarien.
+  samba:
+    image: ghcr.io/servercontainers/samba:latest
+    container_name: deskforge-samba
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      SAMBA_CONF_LOG_LEVEL: "2"
+      GROUP_vdiusers: "3000"
+      # Für jeden Nutzer eine eigene ACCOUNT_<name>-Zeile ergänzen (Name
+      # muss zum LDAP/Authentik-Login passen). Siehe
+      # docs/FSLOGIX-PROFILE-CONTAINERS.md für das genaue Vorgehen
+      # (Passwort-Hashes statt Klartext, Massen-Anlage per Skript).
+      ACCOUNT_fslogixsvc: "${SAMBA_FSLOGIX_SERVICE_PASSWORD}"
+      GROUPS_fslogixsvc: "vdiusers"
+      # vfs objects = acl_xattr sorgt für eine bessere (wenn auch nicht
+      # perfekte) Windows-ACL-Emulation, die FSLogix für Profile
+      # Container braucht - direkt in der Share-Definition gesetzt, da
+      # die genaue Syntax für globale smb.conf-Optionen je nach
+      # Image-Version variieren kann.
+      SAMBA_VOLUME_CONFIG_profiles: |
+        [profiles]
+        path = /shares/profiles
+        valid users = @vdiusers
+        guest ok = no
+        read only = no
+        browseable = yes
+        vfs objects = acl_xattr
+        map acl inherit = yes
+        store dos attributes = yes
+        create mask = 0600
+        directory mask = 0700
+    volumes:
+      - profiles_data:/shares/profiles
+
+  # Monitoring/Alerting für alle Kernkomponenten, siehe docs/MONITORING.md.
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: deskforge-uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+
+volumes:
+  ldap_data:
+  ldap_config:
+  authentik_db:
+  authentik_media:
+  authentik_templates:
+  profiles_data:
+  uptime_kuma_data:
