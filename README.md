@@ -185,3 +185,17 @@ cd ../dashboard && npm install && npm test
 Beide Testsuiten laufen ohne echte Proxmox-/Kasm-/LDAP-Verbindung (Mocks
 bzw. reine Logik-/Validierungstests) und sollten vor jedem Deployment
 grün sein.
+
+**End-to-End (Dashboard-Frontend):**
+
+```
+cd dashboard
+npx playwright install chromium   # einmalig
+npm run e2e
+```
+
+Die E2E-Tests (`dashboard/e2e/`) fahren das Frontend gegen `dev-server.js`
+(gemockte `/api/*`-Endpunkte) und decken die kritischen Abläufe ab:
+Verbinden/Verlängern/Beenden, Template-Auswahl, Admin-Karten (Status,
+Kapazität, Audit, Nutzung, Orphans), API-Tokens, geplante Anforderungen,
+Filter/Sortierung, Farbschema, Ankündigungsbanner.
