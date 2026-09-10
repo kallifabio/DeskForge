@@ -444,6 +444,23 @@ async function loadAudit(reset) {
 }
 el('auditMore').addEventListener('click', () => loadAudit(false));
 
+// ---- Admin: geplante Anforderungen (Übersicht) -----------
+
+async function loadAdminSchedules() {
+  const ul = el('adminScheduleList');
+  try {
+    const rows = await fetchJson('/api/schedules');
+    ul.innerHTML = rows.length
+      ? rows.map((s) => {
+          const col = s.status === 'pending' ? 'text-amber-400' : s.status === 'done' ? 'text-emerald-400' : 'text-slate-500';
+          return `<li>${esc(formatDate(s.notBefore))} · ${esc(s.username)} · ${esc(s.template)} · <span class="${col}">${esc(s.status)}</span>${s.error ? ` · <span class="text-rose-400">${esc(s.error)}</span>` : ''}</li>`;
+        }).join('')
+      : '<li class="text-slate-500">Keine Planungen.</li>';
+  } catch (err) {
+    ul.innerHTML = `<li class="text-rose-400">${esc(err.message)}</li>`;
+  }
+}
+
 // ---- Admin: API-Tokens ------------------------------------
 
 async function loadTokens() {
@@ -751,6 +768,7 @@ document.querySelectorAll('[data-refresh]').forEach((btn) => {
       audit: () => loadAudit(true),
       usage: loadUsage,
       orphans: loadOrphans,
+      schedules: loadAdminSchedules,
     }[target] || (() => {}))();
   });
 });
@@ -840,6 +858,32 @@ function stopPolling() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
+// ---- Bereichs-Navigation (Sidebar) -----------------------
+
+function showView(name) {
+  document.querySelectorAll('[data-view]').forEach((s) => {
+    s.hidden = s.dataset.view !== name;
+  });
+  document.querySelectorAll('.nav-item').forEach((b) => {
+    b.classList.toggle('active', b.dataset.nav === name);
+  });
+  try { localStorage.setItem('deskforge-view', name); } catch (_) {}
+}
+
+function setupNav(isAdmin) {
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    btn.addEventListener('click', () => showView(btn.dataset.nav));
+  });
+  let start = isAdmin ? 'overview' : 'session';
+  try {
+    const saved = localStorage.getItem('deskforge-view');
+    if (saved === 'session' || (saved && isAdmin && document.querySelector(`[data-view="${saved}"]`))) {
+      start = saved;
+    }
+  } catch (_) {}
+  showView(start);
+}
+
 // ---- Einstiegspunkt ---------------------------------------
 
 function showAppError(message) {
@@ -858,10 +902,10 @@ async function init() {
   }
 
   el('appLoading').hidden = true;
-  el('selfService').hidden = false;
   el('whoami').innerHTML =
-    `<i class="fa-solid fa-user"></i> ${esc(currentUser.username || currentUser.email || '')}` +
-    (currentUser.isAdmin ? ' <span class="text-indigo-400">(Admin)</span>' : '');
+    `<i class="fa-solid fa-user"></i> <span class="nav-label truncate">${esc(currentUser.username || currentUser.email || '')}` +
+    (currentUser.isAdmin ? ' <span class="text-indigo-400">(Admin)</span>' : '') +
+    '</span>';
 
   await refreshMyVmOnce();
   loadHistory();
@@ -869,7 +913,7 @@ async function init() {
   loadMySchedules();
 
   if (currentUser.isAdmin) {
-    el('adminSections').hidden = false;
+    el('adminNav').hidden = false;
     loadUsers();
     loadSessions();
     loadVms();
@@ -878,8 +922,10 @@ async function init() {
     loadAudit(true);
     loadTokens();
     loadUsage();
+    loadAdminSchedules();
   }
 
+  setupNav(currentUser.isAdmin);
   startEventStream();
 }
 

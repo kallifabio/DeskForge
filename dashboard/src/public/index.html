@@ -9,13 +9,14 @@
   <link rel="stylesheet" href="tailwind.css" />
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
   <style>
-    /* Optionales helles Farbschema. Das Markup ist dunkel gestaltet
-       (Tailwind slate-*), hier werden nur die verwendeten Flächen-/
-       Textfarben unter html.theme-light umgefärbt. */
+    /* Helles Farbschema: das Markup ist dunkel gestaltet (Tailwind
+       slate-*), hier werden nur die verwendeten Flächen-/Textfarben
+       unter html.theme-light umgefärbt. */
     html.theme-light body { background: #eef2f6; color: #0f172a; }
     html.theme-light .bg-slate-950 { background: #eef2f6 !important; }
     html.theme-light .bg-slate-900 { background: #ffffff !important; }
     html.theme-light .bg-slate-800 { background: #e2e8f0 !important; }
+    html.theme-light #sidebar { background: #f8fafc !important; }
     html.theme-light .border-slate-800 { border-color: #e2e8f0 !important; }
     html.theme-light .border-slate-700 { border-color: #cbd5e1 !important; }
     html.theme-light .divide-slate-800 > * { border-color: #e2e8f0 !important; }
@@ -23,357 +24,444 @@
     html.theme-light .text-slate-400 { color: #475569 !important; }
     html.theme-light .text-slate-500 { color: #64748b !important; }
     html.theme-light .placeholder-slate-500::placeholder { color: #94a3b8 !important; }
+    html.theme-light .nav-item:hover { background: rgba(15,23,42,.06); }
+
     .capbar { height: 6px; border-radius: 999px; background: rgba(148,163,184,.25); overflow: hidden; }
     .capbar > span { display: block; height: 100%; background: #6366f1; }
     th[data-sort] { cursor: pointer; user-select: none; }
-    th[data-sort]::after { content: ""; }
     th[data-sort][aria-sort="ascending"]::after { content: " \25B2"; }
     th[data-sort][aria-sort="descending"]::after { content: " \25BC"; }
+
+    /* Sidebar-Navigation */
+    .nav-item {
+      display: flex; align-items: center; gap: .7rem; width: 100%;
+      padding: .5rem .7rem; border-radius: .5rem;
+      font-size: .875rem; text-align: left; color: inherit;
+      border-left: 2px solid transparent; transition: background .12s;
+    }
+    .nav-item:hover { background: rgba(148,163,184,.12); }
+    .nav-item.active { background: rgba(99,102,241,.16); border-left-color: #6366f1; color: #fff; }
+    html.theme-light .nav-item.active { color: #1e1b4b; }
+    .nav-item i { width: 1rem; text-align: center; flex-shrink: 0; }
+    @media (max-width: 767px) { .nav-label { display: none; } }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-    <h1 class="text-lg font-semibold flex items-center gap-2">
-      <i class="fa-solid fa-display text-indigo-400"></i>
-      DeskForge
-    </h1>
-    <div class="flex items-center gap-4 text-sm text-slate-400">
-      <span id="liveDot" title="Live-Verbindung" class="hidden items-center gap-1.5">
-        <i class="fa-solid fa-circle text-[8px]"></i> Live
-      </span>
-      <span id="whoami" class="flex items-center gap-2"></span>
-      <button id="themeToggle" type="button" title="Farbschema umschalten"
-              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
-        <i class="fa-solid fa-circle-half-stroke"></i>
-      </button>
-      <a href="/auth/logout" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
-        <i class="fa-solid fa-right-from-bracket"></i> Abmelden
-      </a>
-    </div>
-  </header>
+  <div class="flex min-h-screen">
 
-  <main class="max-w-4xl mx-auto p-6 grid gap-6">
-
-    <div id="appLoading" class="text-sm text-slate-400 flex items-center gap-2">
-      <i class="fa-solid fa-spinner fa-spin"></i> Dashboard wird geladen...
-    </div>
-
-    <div id="appError" hidden class="bg-rose-950 border border-rose-800 text-rose-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <span id="appErrorText"></span>
-    </div>
-
-    <!-- Ankündigungsbanner (von Admins gesetzt) -->
-    <div id="announcementBar" hidden class="rounded-lg px-4 py-3 text-sm flex items-start gap-2 border">
-      <i class="fa-solid fa-bullhorn mt-0.5"></i>
-      <span id="announcementText" class="flex-1"></span>
-    </div>
-
-    <!-- Selbstbedienung -->
-    <section id="selfService" hidden class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-      <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-        <i class="fa-solid fa-desktop"></i> Meine VDI-Sitzung
-      </h2>
-      <div id="myVmStatus" class="text-sm text-slate-400 mb-1">Lädt...</div>
-      <div id="idleInfo" hidden class="text-xs text-slate-500 mb-2"></div>
-      <div id="quotaHint" hidden class="text-xs text-slate-500 mb-2"></div>
-      <label id="templatePick" hidden class="text-sm text-slate-400 mb-3 flex items-center gap-2">
-        VM-Typ
-        <select id="templateSelect" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-      </label>
-      <div class="flex flex-wrap gap-3">
-        <a id="connectBtn" hidden target="_blank" rel="noopener"
-           class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
-          <i class="fa-solid fa-arrow-right-to-bracket"></i> Verbinden
-        </a>
-        <button id="extendBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
-          <i class="fa-solid fa-hourglass-half"></i> Sitzung verlängern
-        </button>
-        <button id="rebootBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
-          <i class="fa-solid fa-rotate-right"></i> Neu starten
-        </button>
-        <button id="requestVmBtn" hidden class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
-          <i class="fa-solid fa-plus"></i> VM anfordern
-        </button>
-        <button id="stopVmBtn" hidden class="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
-          <i class="fa-solid fa-power-off"></i> Sitzung beenden
-        </button>
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-16 md:w-60 shrink-0 border-r border-slate-800 bg-slate-900 flex flex-col">
+      <div class="px-3 md:px-5 py-4 border-b border-slate-800">
+        <span class="text-lg font-semibold flex items-center gap-2">
+          <i class="fa-solid fa-display text-indigo-400"></i>
+          <span class="nav-label">DeskForge</span>
+        </span>
       </div>
 
-      <details id="historyBox" class="mt-4 text-sm">
-        <summary class="cursor-pointer text-slate-400 hover:text-slate-300">Meine letzten Sitzungen</summary>
-        <ul id="historyList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
-      </details>
-
-      <details id="scheduleBox" class="mt-2 text-sm">
-        <summary class="cursor-pointer text-slate-400 hover:text-slate-300">Sitzung planen</summary>
-        <form id="scheduleForm" class="mt-2 flex flex-wrap gap-2 items-center">
-          <input id="scheduleWhen" type="datetime-local"
-                 class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <select id="scheduleTemplate"
-                  class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
-            <i class="fa-solid fa-calendar-plus"></i> Planen
+      <nav class="flex-1 p-2 space-y-1 overflow-y-auto">
+        <button type="button" class="nav-item" data-nav="session">
+          <i class="fa-solid fa-desktop"></i><span class="nav-label">Meine Sitzung</span>
+        </button>
+        <div id="adminNav" hidden class="space-y-1 pt-2 mt-2 border-t border-slate-800">
+          <p class="nav-label px-2 pb-1 text-[10px] uppercase tracking-wider text-slate-500">Administration</p>
+          <button type="button" class="nav-item" data-nav="overview">
+            <i class="fa-solid fa-gauge-high"></i><span class="nav-label">Übersicht</span>
           </button>
-        </form>
-        <ul id="scheduleList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
-      </details>
-    </section>
+          <button type="button" class="nav-item" data-nav="provision">
+            <i class="fa-solid fa-user-shield"></i><span class="nav-label">Bereitstellen</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="users">
+            <i class="fa-solid fa-users"></i><span class="nav-label">Nutzer</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="sessions">
+            <i class="fa-solid fa-window-restore"></i><span class="nav-label">Sitzungen</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="vms">
+            <i class="fa-solid fa-server"></i><span class="nav-label">VMs</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="ops">
+            <i class="fa-solid fa-sliders"></i><span class="nav-label">Betrieb</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="automation">
+            <i class="fa-solid fa-robot"></i><span class="nav-label">Automatisierung</span>
+          </button>
+          <button type="button" class="nav-item" data-nav="audit">
+            <i class="fa-solid fa-clock-rotate-left"></i><span class="nav-label">Audit-Log</span>
+          </button>
+        </div>
+      </nav>
 
-    <!-- Admin -->
-    <div id="adminSections" hidden class="grid gap-6">
-
-      <!-- System-Status + Kapazität nebeneinander -->
-      <div class="grid gap-6 md:grid-cols-2">
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-heart-pulse"></i> System-Status
-          </h2>
-          <ul id="statusList" class="text-sm space-y-2 text-slate-400"></ul>
-        </section>
-
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-gauge-high"></i> Host-Kapazität
-          </h2>
-          <div id="capacityBox" class="text-sm text-slate-400 space-y-3">Lädt...</div>
-        </section>
+      <div class="p-2 md:p-3 border-t border-slate-800 space-y-2 text-sm text-slate-400">
+        <div id="whoami" class="flex items-center gap-2 px-1 min-w-0 truncate"></div>
+        <div class="flex items-center gap-2">
+          <span id="liveDot" title="Live-Verbindung" class="hidden items-center gap-1 text-xs">
+            <i class="fa-solid fa-circle text-[8px]"></i><span class="nav-label">Live</span>
+          </span>
+          <button id="themeToggle" type="button" title="Farbschema umschalten"
+                  class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
+            <i class="fa-solid fa-circle-half-stroke"></i>
+          </button>
+          <a href="/auth/logout" title="Abmelden"
+             class="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
+            <i class="fa-solid fa-right-from-bracket"></i><span class="nav-label">Abmelden</span>
+          </a>
+        </div>
       </div>
+    </aside>
 
-      <!-- Pool-Steuerung + Ankündigung -->
-      <div class="grid gap-6 md:grid-cols-2">
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-layer-group"></i> VM-Pool
-          </h2>
-          <p id="poolInfo" class="text-sm text-slate-400 mb-3">Lädt...</p>
-          <form id="poolForm" class="flex gap-3 items-center">
-            <label class="text-sm text-slate-400" for="poolSize">Ziel</label>
-            <input id="poolSize" type="number" min="0" max="50"
-                   class="w-20 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
-              Übernehmen
-            </button>
-          </form>
-          <p id="poolStatus" class="text-xs text-slate-500 mt-2"></p>
-        </section>
+    <!-- Hauptbereich -->
+    <main class="flex-1 min-w-0 p-5 lg:p-8">
+      <div class="max-w-6xl">
 
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-            <i class="fa-solid fa-bullhorn"></i> Ankündigungsbanner
-          </h2>
-          <form id="announceForm" class="space-y-2">
-            <textarea id="announceText" rows="2" maxlength="500" placeholder="Leer lassen = Banner ausblenden"
-                      class="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-            <div class="flex gap-3 items-center">
-              <select id="announceLevel" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm">
-                <option value="info">Info</option>
-                <option value="warning">Warnung</option>
-                <option value="critical">Kritisch</option>
-              </select>
-              <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
-                Speichern
-              </button>
-              <span id="announceStatus" class="text-xs text-slate-500"></span>
+        <div id="appLoading" class="text-sm text-slate-400 flex items-center gap-2">
+          <i class="fa-solid fa-spinner fa-spin"></i> Dashboard wird geladen...
+        </div>
+
+        <div id="appError" hidden class="bg-rose-950 border border-rose-800 text-rose-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2 mb-6">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span id="appErrorText"></span>
+        </div>
+
+        <div id="announcementBar" hidden class="rounded-lg px-4 py-3 text-sm flex items-start gap-2 border mb-6">
+          <i class="fa-solid fa-bullhorn mt-0.5"></i>
+          <span id="announcementText" class="flex-1"></span>
+        </div>
+
+        <!-- ============ Meine Sitzung ============ -->
+        <section data-view="session" hidden>
+          <h1 class="text-xl font-semibold mb-5 flex items-center gap-2">
+            <i class="fa-solid fa-desktop text-indigo-400"></i> Meine VDI-Sitzung
+          </h1>
+
+          <div class="grid gap-6 lg:grid-cols-3">
+            <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div id="myVmStatus" class="text-sm text-slate-300 mb-1">Lädt...</div>
+              <div id="idleInfo" hidden class="text-xs text-slate-500 mb-2"></div>
+              <div id="quotaHint" hidden class="text-xs text-slate-500 mb-2"></div>
+              <label id="templatePick" hidden class="text-sm text-slate-400 mb-3 flex items-center gap-2">
+                VM-Typ
+                <select id="templateSelect" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+              </label>
+              <div class="flex flex-wrap gap-3 mt-3">
+                <a id="connectBtn" hidden target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+                  <i class="fa-solid fa-arrow-right-to-bracket"></i> Verbinden
+                </a>
+                <button id="extendBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
+                  <i class="fa-solid fa-hourglass-half"></i> Sitzung verlängern
+                </button>
+                <button id="rebootBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
+                  <i class="fa-solid fa-rotate-right"></i> Neu starten
+                </button>
+                <button id="requestVmBtn" hidden class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+                  <i class="fa-solid fa-plus"></i> VM anfordern
+                </button>
+                <button id="stopVmBtn" hidden class="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+                  <i class="fa-solid fa-power-off"></i> Sitzung beenden
+                </button>
+              </div>
             </div>
-          </form>
-        </section>
-      </div>
 
-      <div class="grid gap-6 md:grid-cols-2">
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-              <i class="fa-solid fa-coins"></i> Nutzung &amp; Kosten
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 text-sm">
+              <details id="historyBox" open>
+                <summary class="cursor-pointer text-slate-400 hover:text-slate-300 font-medium">Letzte Sitzungen</summary>
+                <ul id="historyList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
+              </details>
+              <details id="scheduleBox" class="border-t border-slate-800 pt-3">
+                <summary class="cursor-pointer text-slate-400 hover:text-slate-300 font-medium">Sitzung planen</summary>
+                <form id="scheduleForm" class="mt-2 flex flex-col gap-2">
+                  <input id="scheduleWhen" type="datetime-local"
+                         class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <select id="scheduleTemplate"
+                          class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                  <button type="submit" class="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+                    <i class="fa-solid fa-calendar-plus"></i> Planen
+                  </button>
+                </form>
+                <ul id="scheduleList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ Übersicht ============ -->
+        <section data-view="overview" hidden>
+          <h1 class="text-xl font-semibold mb-5">Übersicht</h1>
+          <div class="grid gap-6 lg:grid-cols-3">
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-heart-pulse"></i> System-Status
+              </h2>
+              <ul id="statusList" class="text-sm space-y-2 text-slate-400"></ul>
+            </section>
+
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-gauge-high"></i> Host-Kapazität
+              </h2>
+              <div id="capacityBox" class="text-sm text-slate-400 space-y-3">Lädt...</div>
+            </section>
+
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div class="flex items-center justify-between mb-3">
+                <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+                  <i class="fa-solid fa-coins"></i> Nutzung &amp; Kosten
+                </h2>
+                <button class="text-indigo-400 hover:text-indigo-300 text-sm" data-refresh="usage" title="Aktualisieren">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+              <div id="usageBox" class="text-sm text-slate-400">Lädt...</div>
+            </section>
+          </div>
+
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 mt-6">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+                <i class="fa-solid fa-ghost"></i> Verwaiste Ressourcen
+              </h2>
+              <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="orphans">
+                <i class="fa-solid fa-arrows-rotate"></i> Prüfen
+              </button>
+            </div>
+            <div id="orphansBox" class="text-sm text-slate-400 md:grid md:grid-cols-2 md:gap-6">Noch nicht geprüft.</div>
+          </section>
+        </section>
+
+        <!-- ============ Bereitstellen ============ -->
+        <section data-view="provision" hidden>
+          <h1 class="text-xl font-semibold mb-5">Für Nutzer bereitstellen</h1>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-2xl">
+            <form id="adminProvisionForm" class="flex gap-3 flex-wrap">
+              <input id="adminProvisionUsername" type="text" placeholder="Benutzer-ID (z.B. alice)"
+                     class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <select id="adminProvisionTemplate" hidden
+                      class="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+              <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fa-solid fa-plus"></i> Anfordern
+              </button>
+            </form>
+            <p id="adminProvisionStatus" class="text-sm text-slate-400 mt-3"></p>
+          </section>
+        </section>
+
+        <!-- ============ Nutzer ============ -->
+        <section data-view="users" hidden>
+          <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+            <h1 class="text-xl font-semibold">Nutzer <span class="text-slate-500 text-sm">(LDAP)</span></h1>
+            <div class="flex items-center gap-2">
+              <input data-filter="users" type="search" placeholder="Filtern..."
+                     class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="users">
+                <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+              </button>
+            </div>
+          </div>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" data-table="users">
+                <thead>
+                  <tr class="text-slate-400 text-left border-b border-slate-800">
+                    <th scope="col" class="py-2 font-medium" data-sort="uid">Benutzer-ID</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="name">Name</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="email">E-Mail</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <div id="userDetail" hidden class="mt-4 border-t border-slate-800 pt-4 text-sm text-slate-400"></div>
+          </section>
+        </section>
+
+        <!-- ============ Sitzungen ============ -->
+        <section data-view="sessions" hidden>
+          <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+            <h1 class="text-xl font-semibold">Aktive Sitzungen <span class="text-slate-500 text-sm">(Kasm)</span></h1>
+            <div class="flex items-center gap-2">
+              <input data-filter="sessions" type="search" placeholder="Filtern..."
+                     class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="sessions">
+                <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+              </button>
+            </div>
+          </div>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" data-table="sessions">
+                <thead>
+                  <tr class="text-slate-400 text-left border-b border-slate-800">
+                    <th scope="col" class="py-2 font-medium" data-sort="kasm_id">Kasm-ID</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="user">Nutzer</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="status">Status</th>
+                    <th scope="col" class="py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============ VMs ============ -->
+        <section data-view="vms" hidden>
+          <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+            <h1 class="text-xl font-semibold">Zugewiesene VMs <span class="text-slate-500 text-sm">(Proxmox)</span></h1>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button id="bulkIdleBtn" class="text-amber-400 hover:text-amber-300 text-sm inline-flex items-center gap-1.5">
+                <i class="fa-solid fa-broom"></i> Alle Idle abbauen
+              </button>
+              <input data-filter="vms" type="search" placeholder="Filtern..."
+                     class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">
+                <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+              </button>
+            </div>
+          </div>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" data-table="vms">
+                <thead>
+                  <tr class="text-slate-400 text-left border-b border-slate-800">
+                    <th scope="col" class="py-2 font-medium" data-sort="vmid">VMID</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="username">Nutzer</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="ip">IP</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="assignedAt">Zugewiesen seit</th>
+                    <th scope="col" class="py-2 font-medium" data-sort="reapAt">Abbau um</th>
+                    <th scope="col" class="py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody id="vmsTableBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
+          </section>
+        </section>
+
+        <!-- ============ Betrieb ============ -->
+        <section data-view="ops" hidden>
+          <h1 class="text-xl font-semibold mb-5">Betrieb</h1>
+          <div class="grid gap-6 md:grid-cols-2">
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-layer-group"></i> VM-Pool
+              </h2>
+              <p id="poolInfo" class="text-sm text-slate-400 mb-3">Lädt...</p>
+              <form id="poolForm" class="flex gap-3 items-center">
+                <label class="text-sm text-slate-400" for="poolSize">Ziel</label>
+                <input id="poolSize" type="number" min="0" max="50"
+                       class="w-20 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+                  Übernehmen
+                </button>
+              </form>
+              <p id="poolStatus" class="text-xs text-slate-500 mt-2"></p>
+            </section>
+
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-bullhorn"></i> Ankündigungsbanner
+              </h2>
+              <form id="announceForm" class="space-y-2">
+                <textarea id="announceText" rows="2" maxlength="500" placeholder="Leer lassen = Banner ausblenden"
+                          class="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                <div class="flex gap-3 items-center">
+                  <select id="announceLevel" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm">
+                    <option value="info">Info</option>
+                    <option value="warning">Warnung</option>
+                    <option value="critical">Kritisch</option>
+                  </select>
+                  <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+                    Speichern
+                  </button>
+                  <span id="announceStatus" class="text-xs text-slate-500"></span>
+                </div>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <!-- ============ Automatisierung ============ -->
+        <section data-view="automation" hidden>
+          <h1 class="text-xl font-semibold mb-5">Automatisierung</h1>
+
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-6">
+            <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-key"></i> API-Tokens
             </h2>
-            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="usage">
-              <i class="fa-solid fa-arrows-rotate"></i>
-            </button>
-          </div>
-          <div id="usageBox" class="text-sm text-slate-400">Lädt...</div>
+            <form id="tokenForm" class="flex gap-3 flex-wrap mb-3">
+              <input id="tokenName" type="text" placeholder="Name (z.B. ci-runner)"
+                     class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input id="tokenUser" type="text" placeholder="Nutzer-Bindung (leer = *)"
+                     class="bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fa-solid fa-plus"></i> Erstellen
+              </button>
+            </form>
+            <div id="tokenReveal" hidden class="bg-emerald-950 border border-emerald-800 text-emerald-200 rounded-md px-3 py-2 text-sm mb-3 break-all">
+              <i class="fa-solid fa-circle-check mr-1"></i> Neues Token (nur jetzt sichtbar):
+              <code id="tokenRevealValue" class="font-mono"></code>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-slate-400 text-left border-b border-slate-800">
+                    <th scope="col" class="py-2 font-medium">Name</th>
+                    <th scope="col" class="py-2 font-medium">Nutzer</th>
+                    <th scope="col" class="py-2 font-medium">Präfix</th>
+                    <th scope="col" class="py-2 font-medium">Erstellt</th>
+                    <th scope="col" class="py-2 font-medium">Zuletzt genutzt</th>
+                    <th scope="col" class="py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody id="tokensTableBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+                <i class="fa-solid fa-calendar-days"></i> Geplante Anforderungen
+              </h2>
+              <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="schedules">
+                <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+              </button>
+            </div>
+            <ul id="adminScheduleList" class="text-sm text-slate-400 space-y-1">Lädt...</ul>
+          </section>
         </section>
 
-        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-              <i class="fa-solid fa-ghost"></i> Verwaiste Ressourcen
-            </h2>
-            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="orphans">
-              <i class="fa-solid fa-arrows-rotate"></i> Prüfen
+        <!-- ============ Audit-Log ============ -->
+        <section data-view="audit" hidden>
+          <div class="flex items-center justify-between mb-5">
+            <h1 class="text-xl font-semibold">Audit-Log</h1>
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="audit">
+              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
             </button>
           </div>
-          <div id="orphansBox" class="text-sm text-slate-400">Noch nicht geprüft.</div>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-slate-400 text-left border-b border-slate-800">
+                    <th scope="col" class="py-2 font-medium">Zeit</th>
+                    <th scope="col" class="py-2 font-medium">Aktion</th>
+                    <th scope="col" class="py-2 font-medium">Auslöser</th>
+                    <th scope="col" class="py-2 font-medium">VM / Nutzer</th>
+                    <th scope="col" class="py-2 font-medium">Detail</th>
+                  </tr>
+                </thead>
+                <tbody id="auditTableBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+            <button id="auditMore" hidden class="mt-3 text-indigo-400 hover:text-indigo-300 text-sm">Mehr laden</button>
+          </section>
         </section>
+
       </div>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-          <i class="fa-solid fa-user-shield"></i> Für Nutzer bereitstellen
-        </h2>
-        <form id="adminProvisionForm" class="flex gap-3 flex-wrap">
-          <input id="adminProvisionUsername" type="text" placeholder="Benutzer-ID (z.B. alice)"
-                 class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <select id="adminProvisionTemplate" hidden
-                  class="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
-          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
-            <i class="fa-solid fa-plus"></i> Anfordern
-          </button>
-        </form>
-        <p id="adminProvisionStatus" class="text-sm text-slate-400 mt-3"></p>
-      </section>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-            <i class="fa-solid fa-users"></i> Nutzer (LDAP)
-          </h2>
-          <div class="flex items-center gap-2">
-            <input data-filter="users" type="search" placeholder="Filtern..."
-                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="users">
-              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-            </button>
-          </div>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm" data-table="users">
-            <thead>
-              <tr class="text-slate-400 text-left border-b border-slate-800">
-                <th scope="col" class="py-2 font-medium" data-sort="uid">Benutzer-ID</th>
-                <th scope="col" class="py-2 font-medium" data-sort="name">Name</th>
-                <th scope="col" class="py-2 font-medium" data-sort="email">E-Mail</th>
-              </tr>
-            </thead>
-            <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-        <div id="userDetail" hidden class="mt-4 border-t border-slate-800 pt-4 text-sm text-slate-400"></div>
-      </section>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-            <i class="fa-solid fa-desktop"></i> Aktive Sitzungen (Kasm)
-          </h2>
-          <div class="flex items-center gap-2">
-            <input data-filter="sessions" type="search" placeholder="Filtern..."
-                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="sessions">
-              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-            </button>
-          </div>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm" data-table="sessions">
-            <thead>
-              <tr class="text-slate-400 text-left border-b border-slate-800">
-                <th scope="col" class="py-2 font-medium" data-sort="kasm_id">Kasm-ID</th>
-                <th scope="col" class="py-2 font-medium" data-sort="user">Nutzer</th>
-                <th scope="col" class="py-2 font-medium" data-sort="status">Status</th>
-                <th scope="col" class="py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-            <i class="fa-solid fa-server"></i> Zugewiesene VMs (Proxmox)
-          </h2>
-          <div class="flex items-center gap-2">
-            <button id="bulkIdleBtn" class="text-amber-400 hover:text-amber-300 text-sm inline-flex items-center gap-1.5">
-              <i class="fa-solid fa-broom"></i> Alle Idle abbauen
-            </button>
-            <input data-filter="vms" type="search" placeholder="Filtern..."
-                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">
-              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-            </button>
-          </div>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm" data-table="vms">
-            <thead>
-              <tr class="text-slate-400 text-left border-b border-slate-800">
-                <th scope="col" class="py-2 font-medium" data-sort="vmid">VMID</th>
-                <th scope="col" class="py-2 font-medium" data-sort="username">Nutzer</th>
-                <th scope="col" class="py-2 font-medium" data-sort="ip">IP</th>
-                <th scope="col" class="py-2 font-medium" data-sort="assignedAt">Zugewiesen seit</th>
-                <th scope="col" class="py-2 font-medium" data-sort="reapAt">Abbau um</th>
-                <th scope="col" class="py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody id="vmsTableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-        <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
-      </section>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
-          <i class="fa-solid fa-key"></i> API-Tokens (Automatisierung)
-        </h2>
-        <form id="tokenForm" class="flex gap-3 flex-wrap mb-3">
-          <input id="tokenName" type="text" placeholder="Name (z.B. ci-runner)"
-                 class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <input id="tokenUser" type="text" placeholder="Nutzer-Bindung (leer = *)"
-                 class="bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
-            <i class="fa-solid fa-plus"></i> Erstellen
-          </button>
-        </form>
-        <div id="tokenReveal" hidden class="bg-emerald-950 border border-emerald-800 text-emerald-200 rounded-md px-3 py-2 text-sm mb-3 break-all">
-          <i class="fa-solid fa-circle-check mr-1"></i> Neues Token (nur jetzt sichtbar):
-          <code id="tokenRevealValue" class="font-mono"></code>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="text-slate-400 text-left border-b border-slate-800">
-                <th scope="col" class="py-2 font-medium">Name</th>
-                <th scope="col" class="py-2 font-medium">Nutzer</th>
-                <th scope="col" class="py-2 font-medium">Präfix</th>
-                <th scope="col" class="py-2 font-medium">Erstellt</th>
-                <th scope="col" class="py-2 font-medium">Zuletzt genutzt</th>
-                <th scope="col" class="py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody id="tokensTableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-            <i class="fa-solid fa-clock-rotate-left"></i> Audit-Log
-          </h2>
-          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="audit">
-            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-          </button>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="text-slate-400 text-left border-b border-slate-800">
-                <th scope="col" class="py-2 font-medium">Zeit</th>
-                <th scope="col" class="py-2 font-medium">Aktion</th>
-                <th scope="col" class="py-2 font-medium">Auslöser</th>
-                <th scope="col" class="py-2 font-medium">VM / Nutzer</th>
-                <th scope="col" class="py-2 font-medium">Detail</th>
-              </tr>
-            </thead>
-            <tbody id="auditTableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-        <button id="auditMore" hidden class="mt-3 text-indigo-400 hover:text-indigo-300 text-sm">Mehr laden</button>
-      </section>
-
-    </div>
-  </main>
+    </main>
+  </div>
 
   <script src="app.js"></script>
 </body>
