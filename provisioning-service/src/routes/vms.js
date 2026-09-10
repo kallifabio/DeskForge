@@ -119,6 +119,26 @@ function buildRouter({ store, proxmox, kasm, config, logger, access }) {
     }
   });
 
+  // ---- Wartungszugriff protokollieren --------------------------
+  // Ein Admin verbindet sich (über den Kasm-Deep-Link) mit der Sitzung
+  // eines anderen Nutzers. Der eigentliche Sprung passiert im Browser;
+  // hier wird der Zugriff nur ins Audit-Log geschrieben und die
+  // autoritative connectUrl zurückgegeben.
+  router.post('/vms/:username/connect-audit', async (req, res) => {
+    const vm = findAssigned(req.params.username);
+    if (!vm) return res.status(404).json({ error: 'Keine zugewiesene VM für diesen Nutzer' });
+    await store.appendAudit(
+      auditEntry({
+        action: 'admin.connect',
+        actor: req.get('X-Actor') || 'admin',
+        vmid: vm.vmid,
+        username: req.params.username,
+        detail: 'Wartungszugriff auf fremde Sitzung',
+      })
+    );
+    res.json({ status: 'ok', connectUrl: toPublicVm(vm, publicOpts()).connectUrl });
+  });
+
   // ---- Historie & Audit ------------------------------------------
 
   router.get('/history/:username', (req, res) => {

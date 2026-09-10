@@ -433,6 +433,16 @@ app.post('/api/sessions/:id/disconnect', requireAuth, requireAdmin, async (req, 
   }
 });
 
+// Admin-Wartungszugriff auf die Sitzung eines anderen Nutzers protokollieren.
+app.post('/api/vms/:username/connect-audit', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.connectAudit(req.params.username, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
 app.get('/api/users/:uid', requireAuth, requireAdmin, async (req, res) => {
   const uid = req.params.uid;
   try {

@@ -99,6 +99,19 @@ test('Audit-Log ist befüllt', async ({ page }) => {
   await expect(page.locator('#auditTableBody tr')).not.toHaveCount(0);
 });
 
+test('VMs: Admin kann sich für Wartung mit fremder Sitzung verbinden (Zugriff wird protokolliert)', async ({ page }) => {
+  await nav(page, 'vms');
+  const link = page.locator('#vmsTableBody a[data-connect-user]').first();
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', /kasm\.deskforge\.local/);
+  await expect(link).toHaveAttribute('target', '_blank');
+  const [req] = await Promise.all([
+    page.waitForRequest((r) => r.url().includes('/connect-audit') && r.method() === 'POST'),
+    link.click(),
+  ]);
+  expect(req).toBeTruthy();
+});
+
 test('Automatisierung: API-Token anlegen zeigt Klartext einmalig', async ({ page }) => {
   await nav(page, 'automation');
   await page.fill('#tokenName', 'e2e-runner');

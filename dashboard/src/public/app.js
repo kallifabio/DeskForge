@@ -606,6 +606,9 @@ async function loadUserDetail(uid) {
     const vm = d.vm
       ? `VM ${esc(d.vm.vmid)} (${esc(d.vm.status)}, IP ${esc(d.vm.ip || '-')}, Typ ${esc(d.vm.template || 'standard')})`
       : 'keine aktive VM';
+    const connect = d.vm && d.vm.connectUrl
+      ? ` <a href="${esc(d.vm.connectUrl)}" target="_blank" rel="noopener" data-connect-user="${esc(d.user.uid)}" title="Für Wartung mit dieser Sitzung verbinden" class="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-arrow-right-to-bracket"></i> Verbinden</a>`
+      : '';
     const hist = (d.history || []).slice(0, 5)
       .map((h) => `<li>${esc(formatDate(h.assignedAt))} · ${esc(h.durationMinutes)} Min.</li>`).join('') || '<li class="text-slate-500">keine</li>';
     box.innerHTML = `
@@ -614,10 +617,13 @@ async function loadUserDetail(uid) {
         <button id="userDetailClose" class="text-slate-500 hover:text-slate-300 text-xs">schließen</button>
       </div>
       <div>${esc(d.user.uid)} · ${esc(d.user.email || '')}</div>
-      <div class="mt-1">Aktuell: ${vm}</div>
+      <div class="mt-1">Aktuell: ${vm}${connect}</div>
       <div class="mt-1">Letzte Sitzungen:</div>
       <ul class="list-disc ml-4 text-xs">${hist}</ul>`;
     el('userDetailClose').addEventListener('click', () => { box.hidden = true; });
+    box.querySelectorAll('[data-connect-user]').forEach((a) => {
+      a.addEventListener('click', () => logMaintenanceConnect(a.dataset.connectUser));
+    });
   } catch (err) {
     box.innerHTML = `<span class="text-rose-400">${esc(err.message)}</span>`;
   }
@@ -707,12 +713,18 @@ function renderTable(name) {
         <td class="py-2 text-slate-400">${esc(vm.ip)}</td>
         <td class="py-2 text-slate-400 whitespace-nowrap">${esc(formatDate(vm.assignedAt))}</td>
         <td class="py-2 text-slate-400 whitespace-nowrap">${vm.reapAt ? esc(relTime(vm.reapAt)) : '-'}</td>
-        <td class="py-2 text-right">
+        <td class="py-2 text-right whitespace-nowrap">
+          ${vm.connectUrl ? `<a href="${esc(vm.connectUrl)}" target="_blank" rel="noopener" data-connect-user="${esc(vm.username)}" title="Für Wartung mit dieser Sitzung verbinden" class="text-emerald-400 hover:text-emerald-300 text-xs inline-flex items-center gap-1 mr-3">
+            <i class="fa-solid fa-arrow-right-to-bracket"></i> Verbinden
+          </a>` : ''}
           <button data-stop-vmid="${esc(vm.vmid)}" class="text-rose-400 hover:text-rose-300 text-xs inline-flex items-center gap-1">
             <i class="fa-solid fa-power-off"></i> Stoppen
           </button>
         </td>
       </tr>`).join('');
+    tbody.querySelectorAll('[data-connect-user]').forEach((a) => {
+      a.addEventListener('click', () => logMaintenanceConnect(a.dataset.connectUser));
+    });
     tbody.querySelectorAll('[data-stop-vmid]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         if (!(await sweetConfirm(`VM ${btn.dataset.stopVmid} wird gestoppt und abgebaut.`, { title: 'VM abbauen?', confirmText: 'Abbauen', danger: true }))) return;
@@ -728,6 +740,15 @@ function renderTable(name) {
       });
     });
   }
+}
+
+// Fire-and-forget: Wartungszugriff eines Admins auf eine fremde Sitzung
+// ins Audit-Log schreiben. Blockiert das Öffnen des Links nicht.
+function logMaintenanceConnect(username) {
+  fetch(`/api/vms/${encodeURIComponent(username)}/connect-audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }).catch(() => {});
 }
 
 function setVmsStatus(message) {
@@ -765,6 +786,7 @@ function setVmsRows(vms) {
     ip: vm.ip || '',
     assignedAt: vm.assignedAt || '',
     reapAt: vm.reapAt || '',
+    connectUrl: vm.connectUrl || '',
   }));
   renderTable('vms');
 }

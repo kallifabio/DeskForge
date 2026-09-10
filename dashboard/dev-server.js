@@ -158,6 +158,13 @@ app.get('/api/orphans', (_req, res) => res.json({
 
 app.post('/api/sessions/:id/disconnect', (req, res) => res.json({ status: 'ok', kasmId: req.params.id }));
 
+app.post('/api/vms/:username/connect-audit', (req, res) => {
+  const vm = vms.find((v) => v.username === req.params.username);
+  if (!vm) return res.status(404).json({ error: 'Keine zugewiesene VM für diesen Nutzer' });
+  audit.unshift({ ts: new Date().toISOString(), action: 'admin.connect', actor: 'admin', vmid: vm.vmid, username: req.params.username, detail: 'Wartungszugriff auf fremde Sitzung' });
+  res.json({ status: 'ok', connectUrl: pub(vm).connectUrl });
+});
+
 app.get('/api/users/:uid', (req, res) => {
   const user = users.find((u) => u.uid === req.params.uid);
   if (!user) return res.status(404).json({ error: 'Nutzer nicht gefunden' });

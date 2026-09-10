@@ -329,6 +329,12 @@ test('POST /sessions/:id/disconnect: Auth ok, scheitert erst an Kasm (502)', wit
   assert.equal(res.status, 502);
 }));
 
+test('POST /vms/:username/connect-audit: 401 ohne Key, 404 für unbekannten Nutzer', withServer(async ({ baseUrl }) => {
+  assert.equal((await fetch(`${baseUrl}/vms/x/connect-audit`, { method: 'POST' })).status, 401);
+  const res = await fetch(`${baseUrl}/vms/niemand/connect-audit`, { method: 'POST', headers: KEY });
+  assert.equal(res.status, 404);
+}));
+
 test('API-Token: anlegen, auflisten (ohne Hash), Bearer akzeptiert, widerrufen', withServer(async ({ baseUrl }) => {
   // ohne API-Key kein Zugriff
   assert.equal((await fetch(`${baseUrl}/tokens`)).status, 401);

@@ -180,6 +180,13 @@ async function disconnectSession(kasmId, actor) {
   return res.data;
 }
 
+// Protokolliert einen Admin-Wartungszugriff auf die Sitzung eines
+// anderen Nutzers und liefert die autoritative connectUrl zurück.
+async function connectAudit(username, actor) {
+  const res = await client.post(`/vms/${enc(username)}/connect-audit`, null, actorHeader(actor));
+  return res.data;
+}
+
 module.exports = {
   requestVm,
   listTemplates,
@@ -208,4 +215,5 @@ module.exports = {
   bulkVms,
   orphans,
   disconnectSession,
+  connectAudit,
 };
