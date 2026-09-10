@@ -75,7 +75,12 @@
         <i class="fa-solid fa-desktop"></i> Meine VDI-Sitzung
       </h2>
       <div id="myVmStatus" class="text-sm text-slate-400 mb-1">Lädt...</div>
-      <div id="idleInfo" hidden class="text-xs text-slate-500 mb-3"></div>
+      <div id="idleInfo" hidden class="text-xs text-slate-500 mb-2"></div>
+      <div id="quotaHint" hidden class="text-xs text-slate-500 mb-2"></div>
+      <label id="templatePick" hidden class="text-sm text-slate-400 mb-3 flex items-center gap-2">
+        VM-Typ
+        <select id="templateSelect" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+      </label>
       <div class="flex flex-wrap gap-3">
         <a id="connectBtn" hidden target="_blank" rel="noopener"
            class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
@@ -165,9 +170,11 @@
         <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
           <i class="fa-solid fa-user-shield"></i> Für Nutzer bereitstellen
         </h2>
-        <form id="adminProvisionForm" class="flex gap-3">
+        <form id="adminProvisionForm" class="flex gap-3 flex-wrap">
           <input id="adminProvisionUsername" type="text" placeholder="Benutzer-ID (z.B. alice)"
                  class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <select id="adminProvisionTemplate" hidden
+                  class="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
           <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
             <i class="fa-solid fa-plus"></i> Anfordern
           </button>
@@ -258,6 +265,40 @@
           </table>
         </div>
         <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-key"></i> API-Tokens (Automatisierung)
+        </h2>
+        <form id="tokenForm" class="flex gap-3 flex-wrap mb-3">
+          <input id="tokenName" type="text" placeholder="Name (z.B. ci-runner)"
+                 class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <input id="tokenUser" type="text" placeholder="Nutzer-Bindung (leer = *)"
+                 class="bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+            <i class="fa-solid fa-plus"></i> Erstellen
+          </button>
+        </form>
+        <div id="tokenReveal" hidden class="bg-emerald-950 border border-emerald-800 text-emerald-200 rounded-md px-3 py-2 text-sm mb-3 break-all">
+          <i class="fa-solid fa-circle-check mr-1"></i> Neues Token (nur jetzt sichtbar):
+          <code id="tokenRevealValue" class="font-mono"></code>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-slate-400 text-left border-b border-slate-800">
+                <th scope="col" class="py-2 font-medium">Name</th>
+                <th scope="col" class="py-2 font-medium">Nutzer</th>
+                <th scope="col" class="py-2 font-medium">Präfix</th>
+                <th scope="col" class="py-2 font-medium">Erstellt</th>
+                <th scope="col" class="py-2 font-medium">Zuletzt genutzt</th>
+                <th scope="col" class="py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody id="tokensTableBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">

@@ -13,14 +13,14 @@ const { auditEntry } = require('../../shared/apiSchema');
 // VMID bekommen. Das eigentliche (mehrminütige) Warten auf den
 // Klon-Abschluss passiert danach außerhalb der Sperre, damit currently
 // laufende Klon-Vorgänge andere Anfragen nicht blockieren.
-async function allocateAndCloneVm({ proxmox, mutex, config, name }) {
+async function allocateAndCloneVm({ proxmox, mutex, config, name, templateVmid }) {
   const release = await mutex.acquire();
   let vmid;
   let upid;
   try {
     vmid = await proxmox.getNextVmid();
     upid = await proxmox.submitClone({
-      templateVmid: config.proxmox.templateVmid,
+      templateVmid: templateVmid || config.proxmox.templateVmid,
       newVmid: vmid,
       name,
       linked: config.proxmox.cloneMode === 'linked',
@@ -48,6 +48,7 @@ async function createPoolVm({ store, proxmox, mutex, config, logger }) {
       name: `deskforge-pool-${vmid}`,
       status: 'pool',
       username: null,
+      template: 'standard', // Pool-VMs sind immer das Default-Template
       kasmServerId: null,
       ip,
       createdAt: new Date().toISOString(),

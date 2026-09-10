@@ -31,8 +31,18 @@ const enc = encodeURIComponent;
 
 // ---- Selbstbedienung -------------------------------------------------
 
-async function requestVm(username, actor) {
-  const res = await client.post('/provision', { username }, actorHeader(actor));
+async function requestVm(username, { actor, template, groups } = {}) {
+  const headers = {};
+  if (actor) headers['X-Actor'] = actor;
+  if (groups && groups.length) headers['X-User-Groups'] = groups.join(',');
+  const opts = Object.keys(headers).length ? { headers } : undefined;
+  const res = await client.post('/provision', { username, template }, opts);
+  return res.data;
+}
+
+async function listTemplates(groups) {
+  const opts = groups && groups.length ? { headers: { 'X-User-Groups': groups.join(',') } } : undefined;
+  const res = await client.get('/templates', opts);
   return res.data;
 }
 
@@ -115,8 +125,26 @@ async function setAnnouncement({ text, level }, actor) {
   return res.data;
 }
 
+// ---- API-Tokens (nur Admin) --------------------------------------
+
+async function listTokens() {
+  const res = await client.get('/tokens');
+  return res.data;
+}
+
+async function createToken({ name, username }, actor) {
+  const res = await client.post('/tokens', { name, username }, actorHeader(actor));
+  return res.data;
+}
+
+async function deleteToken(id, actor) {
+  const res = await client.delete(`/tokens/${enc(id)}`, actorHeader(actor));
+  return res.data;
+}
+
 module.exports = {
   requestVm,
+  listTemplates,
   stopVm,
   getMyVm,
   keepAlive,
@@ -131,4 +159,7 @@ module.exports = {
   setPool,
   getAnnouncement,
   setAnnouncement,
+  listTokens,
+  createToken,
+  deleteToken,
 };

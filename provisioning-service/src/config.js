@@ -45,6 +45,12 @@ const schema = z.object({
   IDLE_CHECK_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60_000),
 
   STATE_FILE_PATH: z.string().default('./data/state.json'),
+
+  // Optionale Zugriffs-/Template-Konfiguration (siehe src/access.js).
+  ACCESS_FILE_PATH: z.string().default('./access.json'),
+  // Kontingent (gleichzeitige VMs pro Nutzer), wenn access.json fehlt
+  // oder keine passende Gruppenregel greift.
+  DEFAULT_MAX_CONCURRENT: z.coerce.number().int().min(1).default(1),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -97,4 +103,6 @@ module.exports = {
   },
 
   stateFilePath: env.STATE_FILE_PATH,
+  accessFilePath: env.ACCESS_FILE_PATH,
+  defaultMaxConcurrent: env.DEFAULT_MAX_CONCURRENT,
 };

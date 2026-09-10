@@ -17,6 +17,8 @@ test('StateStore legt eine leere Datei an, falls noch keine existiert', () => {
     history: [],
     announcement: { text: '', level: 'info', updatedAt: null },
     settings: {},
+    apiTokens: [],
+    schedules: [],
   });
 });
 

@@ -74,7 +74,11 @@ app.get('/api/my-vm', requireAuth, async (req, res) => {
 
 app.post('/api/my-vm', requireAuth, provisionLimiter, async (req, res) => {
   try {
-    const result = await provisioning.requestVm(req.session.user.username);
+    const result = await provisioning.requestVm(req.session.user.username, {
+      actor: req.session.user.username,
+      template: req.body && req.body.template,
+      groups: req.session.user.groups,
+    });
     res.json(result);
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
@@ -222,10 +226,14 @@ app.get('/api/vms', requireAuth, requireAdmin, async (_req, res) => {
 });
 
 app.post('/api/vms/provision', requireAuth, requireAdmin, provisionLimiter, async (req, res) => {
-  const { username } = req.body || {};
+  const { username, template } = req.body || {};
   if (!username) return res.status(400).json({ error: 'username fehlt' });
   try {
-    res.json(await provisioning.requestVm(username, req.session.user.username));
+    res.json(await provisioning.requestVm(username, {
+      actor: req.session.user.username,
+      template,
+      groups: req.session.user.groups,
+    }));
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
     res.status(err.response?.status || 502).json(detail);
@@ -289,6 +297,44 @@ app.put('/api/announcement', requireAuth, requireAdmin, async (req, res) => {
   const { text, level } = req.body || {};
   try {
     res.json(await provisioning.setAnnouncement({ text, level }, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+// VM-Templates, die der aktuelle Nutzer anfordern darf (+ Kontingent).
+app.get('/api/templates', requireAuth, async (req, res) => {
+  try {
+    res.json(await provisioning.listTemplates(req.session.user.groups));
+  } catch (err) {
+    res.status(502).json({ error: `Templates nicht abrufbar: ${err.message}` });
+  }
+});
+
+// ---- Admin: API-Tokens für Automatisierung -------------------------
+
+app.get('/api/tokens', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.listTokens());
+  } catch (err) {
+    res.status(502).json({ error: `Tokens nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.post('/api/tokens', requireAuth, requireAdmin, async (req, res) => {
+  const { name, username } = req.body || {};
+  try {
+    res.status(201).json(await provisioning.createToken({ name, username }, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.delete('/api/tokens/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.deleteToken(req.params.id, req.session.user.username));
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
     res.status(err.response?.status || 502).json(detail);

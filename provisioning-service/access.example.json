@@ -1,0 +1,14 @@
+{
+  "_hinweis": "Nach access.json kopieren und anpassen. Fehlt access.json, gibt es genau ein Template 'standard' (PROXMOX_TEMPLATE_VMID) und das Kontingent aus DEFAULT_MAX_CONCURRENT.",
+
+  "templates": {
+    "standard": { "templateVmid": 9000, "label": "Standard (Buero)", "default": true },
+    "dev": { "templateVmid": 9001, "label": "Entwicklung (mehr RAM)" }
+  },
+
+  "groups": {
+    "deskforge-admins": { "templates": ["*"], "maxConcurrent": 10 },
+    "deskforge-dev": { "templates": ["standard", "dev"], "maxConcurrent": 2 },
+    "*": { "templates": ["standard"], "maxConcurrent": 1 }
+  }
+}

@@ -20,6 +20,7 @@
 
 const express = require('express');
 const { requireApiKey } = require('../../../shared/apiKeyAuth');
+const { parseGroupsHeader } = require('../access');
 const {
   toPublicVm,
   auditEntry,
@@ -32,9 +33,19 @@ function effectivePoolSize(store, config) {
   return Number.isInteger(override) ? override : config.pool.size;
 }
 
-function buildRouter({ store, proxmox, kasm, config, logger }) {
+function buildRouter({ store, proxmox, kasm, config, logger, access }) {
   const router = express.Router();
   router.use(requireApiKey(config.provisioningApiKey));
+
+  // Welche VM-Templates darf der aufrufende Nutzer anfordern? (Für die
+  // Template-Auswahl im Dashboard; Gruppen kommen per X-User-Groups.)
+  router.get('/templates', (req, res) => {
+    const groups = parseGroupsHeader(req.get('X-User-Groups'));
+    res.json({
+      templates: access.templatesForGroups(groups),
+      quota: access.resolveForGroups(groups).maxConcurrent,
+    });
+  });
 
   const publicOpts = () => ({
     kasmBaseUrl: config.kasm.baseUrl,

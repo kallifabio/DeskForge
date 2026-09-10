@@ -43,6 +43,8 @@ class StateStore {
     if (typeof raw.settings !== 'object' || raw.settings === null) {
       raw.settings = {}; // z.B. { poolSizeOverride: <int> }
     }
+    if (!Array.isArray(raw.apiTokens)) raw.apiTokens = [];
+    if (!Array.isArray(raw.schedules)) raw.schedules = [];
     return raw;
   }
 

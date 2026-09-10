@@ -9,9 +9,11 @@ const logger = require('./logger');
 const { StateStore } = require('./state/store');
 const { buildProxmoxClient, buildKasmClient } = require('./clients');
 const { Mutex } = require('../../shared/mutex');
+const { loadAccess } = require('./access');
 const { buildRouter: buildProvisionRouter } = require('./routes/provision');
 const { buildRouter: buildVmsRouter } = require('./routes/vms');
 const { buildRouter: buildSessionsRouter } = require('./routes/sessions');
+const { buildRouter: buildTokensRouter } = require('./routes/tokens');
 const { startPoolMaintainer } = require('./jobs/poolMaintainer');
 const { startIdleReaper } = require('./jobs/idleReaper');
 
@@ -20,6 +22,11 @@ function createApp() {
   const proxmox = buildProxmoxClient(config);
   const kasm = buildKasmClient(config);
   const mutex = new Mutex();
+  const access = loadAccess(config.accessFilePath, config, logger);
+  logger.info(
+    { templates: access.templateNames, fromFile: access.fromFile },
+    'Zugriffs-/Template-Konfiguration geladen'
+  );
 
   const app = express();
   app.use(express.json());
@@ -27,9 +34,10 @@ function createApp() {
   // Unauthentifiziert, für Monitoring (siehe docs/MONITORING.md).
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-  app.use(buildProvisionRouter({ store, proxmox, kasm, mutex, config, logger }));
-  app.use(buildVmsRouter({ store, proxmox, kasm, config, logger }));
+  app.use(buildProvisionRouter({ store, proxmox, kasm, mutex, config, logger, access }));
+  app.use(buildVmsRouter({ store, proxmox, kasm, config, logger, access }));
   app.use(buildSessionsRouter({ kasm, config }));
+  app.use(buildTokensRouter({ store, config }));
 
   const poolInterval = startPoolMaintainer({ store, proxmox, mutex, config, logger });
   const idleInterval = startIdleReaper({ store, proxmox, kasm, config, logger });

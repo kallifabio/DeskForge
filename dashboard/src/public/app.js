@@ -167,8 +167,14 @@ el('requestVmBtn').addEventListener('click', async () => {
   const btn = el('requestVmBtn');
   busy(btn, true, '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Fordere VM an...');
   el('myVmStatus').innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Fordere VM an - das kann einige Minuten dauern...';
+  const tplSel = el('templateSelect');
+  const body = tplSel && !el('templatePick').hidden && tplSel.value ? { template: tplSel.value } : {};
   try {
-    await fetchJson('/api/my-vm', { method: 'POST' });
+    await fetchJson('/api/my-vm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     await refreshMyVmOnce();
   } catch (err) {
     el('myVmStatus').innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-400 mr-2"></i>${esc(err.message)}`;
@@ -176,6 +182,25 @@ el('requestVmBtn').addEventListener('click', async () => {
     busy(btn, false);
   }
 });
+
+async function loadTemplates() {
+  try {
+    const { templates, quota } = await fetchJson('/api/templates');
+    const opts = templates.map((t) =>
+      `<option value="${esc(t.name)}"${t.default ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+    for (const id of ['templateSelect', 'adminProvisionTemplate']) {
+      const sel = el(id);
+      if (sel) sel.innerHTML = opts;
+    }
+    const multi = templates.length > 1;
+    el('templatePick').hidden = !multi;
+    el('adminProvisionTemplate').hidden = !multi;
+    if (quota) {
+      el('quotaHint').hidden = false;
+      el('quotaHint').textContent = `Kontingent: ${quota} gleichzeitige VM${quota === 1 ? '' : 's'}`;
+    }
+  } catch (_) { /* Templates optional */ }
+}
 
 el('stopVmBtn').addEventListener('click', async () => {
   if (!confirm('Sitzung wirklich beenden? Die VM wird abgebaut.')) return;
@@ -377,6 +402,63 @@ async function loadAudit(reset) {
 }
 el('auditMore').addEventListener('click', () => loadAudit(false));
 
+// ---- Admin: API-Tokens ------------------------------------
+
+async function loadTokens() {
+  const tbody = el('tokensTableBody');
+  tbody.innerHTML = rowLoading(6);
+  try {
+    const tokens = await fetchJson('/api/tokens');
+    tbody.innerHTML = tokens.length
+      ? tokens.map((t) => `
+          <tr>
+            <td class="py-2">${esc(t.name)}</td>
+            <td class="py-2 text-slate-400">${esc(t.username)}</td>
+            <td class="py-2 font-mono text-xs text-slate-400">${esc(t.tokenPrefix)}…</td>
+            <td class="py-2 text-slate-400 whitespace-nowrap">${esc(formatDate(t.createdAt))}</td>
+            <td class="py-2 text-slate-400 whitespace-nowrap">${t.lastUsedAt ? esc(formatDate(t.lastUsedAt)) : '-'}</td>
+            <td class="py-2 text-right">
+              <button data-del-token="${esc(t.id)}" class="text-rose-400 hover:text-rose-300 text-xs inline-flex items-center gap-1">
+                <i class="fa-solid fa-trash"></i> Widerrufen
+              </button>
+            </td>
+          </tr>`).join('')
+      : rowEmpty(6, 'Keine Tokens.');
+    tbody.querySelectorAll('[data-del-token]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Token widerrufen? Automatisierungen damit brechen sofort.')) return;
+        btn.disabled = true;
+        try {
+          await fetchJson(`/api/tokens/${encodeURIComponent(btn.dataset.delToken)}`, { method: 'DELETE' });
+          loadTokens();
+        } catch (err) { alert(err.message); btn.disabled = false; }
+      });
+    });
+  } catch (err) {
+    tbody.innerHTML = rowError(6, err.message);
+  }
+}
+
+el('tokenForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = el('tokenName').value.trim();
+  if (!name) return;
+  try {
+    const created = await fetchJson('/api/tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, username: el('tokenUser').value.trim() || undefined }),
+    });
+    el('tokenRevealValue').textContent = created.token;
+    el('tokenReveal').hidden = false;
+    el('tokenName').value = '';
+    el('tokenUser').value = '';
+    loadTokens();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 // ---- Admin: Tabellen (Nutzer / Sitzungen / VMs) -----
 
 const tables = {
@@ -524,11 +606,14 @@ el('adminProvisionForm').addEventListener('submit', async (e) => {
   if (!username) return;
   statusEl.className = 'text-sm text-slate-400 mt-3';
   statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Fordere VM an...';
+  const tpl = el('adminProvisionTemplate');
+  const payload = { username };
+  if (tpl && !tpl.hidden && tpl.value) payload.template = tpl.value;
   try {
     const data = await fetchJson('/api/vms/provision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify(payload),
     });
     statusEl.className = 'text-sm text-emerald-400 mt-3';
     statusEl.innerHTML = `<i class="fa-solid fa-circle-check mr-2"></i>VM ${esc(data.vmid)} (${esc(data.ip)}) für '${esc(username)}' bereit.`;
@@ -623,6 +708,7 @@ async function init() {
 
   await refreshMyVmOnce();
   loadHistory();
+  loadTemplates();
 
   if (currentUser.isAdmin) {
     el('adminSections').hidden = false;
@@ -632,6 +718,7 @@ async function init() {
     loadPool();
     loadAnnounceEditor();
     loadAudit(true);
+    loadTokens();
   }
 
   startEventStream();

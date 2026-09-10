@@ -29,7 +29,11 @@ function withServer(fn) {
       original[key] = process.env[key];
       process.env[key] = VALID_ENV[key];
     }
-    process.env.STATE_FILE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'vdi-state-')), 'state.json');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdi-state-'));
+    process.env.STATE_FILE_PATH = path.join(tmpDir, 'state.json');
+    // Bewusst nicht existierender Pfad -> access.js nutzt die Defaults
+    // (ein Template "standard"), unabhängig von einer lokalen access.json.
+    process.env.ACCESS_FILE_PATH = path.join(tmpDir, 'no-access.json');
 
     for (const mod of ['../src/config', '../src/server']) {
       delete require.cache[require.resolve(mod)];
@@ -219,4 +223,73 @@ test('GET /status meldet ok:false, wenn Proxmox und Kasm nicht erreichbar sind',
   assert.equal(body.checks.proxmox.ok, false);
   assert.equal(body.checks.kasm.ok, false);
   assert.equal(body.checks.pool.target, 0);
+}));
+
+// ---- Phase 2a: Templates + API-Tokens ------------------------------
+
+test('GET /templates ohne access.json liefert nur "standard"', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/templates`, { headers: KEY });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.templates.map((t) => t.name), ['standard']);
+  assert.equal(body.templates[0].default, true);
+  assert.equal(body.quota, 1);
+}));
+
+test('POST /provision mit unbekanntem Template -> 400 (vor jedem Proxmox-Aufruf)', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/provision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': VALID_ENV.PROVISIONING_API_KEY },
+    body: JSON.stringify({ username: 'alice', template: 'gibtsnicht' }),
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /Unbekanntes VM-Template/);
+}));
+
+test('API-Token: anlegen, auflisten (ohne Hash), Bearer akzeptiert, widerrufen', withServer(async ({ baseUrl }) => {
+  // ohne API-Key kein Zugriff
+  assert.equal((await fetch(`${baseUrl}/tokens`)).status, 401);
+
+  // anlegen
+  let res = await fetch(`${baseUrl}/tokens`, {
+    method: 'POST',
+    headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'ci-runner', username: 'alice' }),
+  });
+  assert.equal(res.status, 201);
+  const created = await res.json();
+  assert.match(created.token, /^dfp_[0-9a-f]{48}$/);
+  assert.equal(created.username, 'alice');
+  assert.equal(created.hash, undefined);
+
+  // auflisten -> kein Klartext, kein Hash
+  res = await fetch(`${baseUrl}/tokens`, { headers: KEY });
+  const list = await res.json();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].hash, undefined);
+  assert.equal(list[0].token, undefined);
+  assert.equal(list[0].tokenPrefix.startsWith('dfp_'), true);
+
+  // Bearer-Token wird von /provision akzeptiert (kein 401; scheitert
+  // später an Proxmox mit 500 - aber die Auth-Schicht lässt durch)
+  res = await fetch(`${baseUrl}/provision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${created.token}` },
+    body: JSON.stringify({}),
+  });
+  assert.notEqual(res.status, 401);
+
+  // falsches Bearer-Token -> 401
+  res = await fetch(`${baseUrl}/provision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer dfp_deadbeef' },
+    body: JSON.stringify({ username: 'x' }),
+  });
+  assert.equal(res.status, 401);
+
+  // widerrufen
+  res = await fetch(`${baseUrl}/tokens/${created.id}`, { method: 'DELETE', headers: KEY });
+  assert.equal(res.status, 200);
+  res = await fetch(`${baseUrl}/tokens/${created.id}`, { method: 'DELETE', headers: KEY });
+  assert.equal(res.status, 404);
 }));

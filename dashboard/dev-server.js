@@ -91,6 +91,31 @@ app.put('/api/announcement', (req, res) => {
   res.json(announcement);
 });
 
+app.get('/api/templates', (_req, res) => res.json({
+  templates: [
+    { name: 'standard', label: 'Standard (Buero)', default: true },
+    { name: 'dev', label: 'Entwicklung (mehr RAM)', default: false },
+  ],
+  quota: IS_ADMIN ? 10 : 2,
+}));
+
+let tokens = [
+  { id: 't-1', name: 'ci-runner', username: '*', tokenPrefix: 'dfp_9a3f2b', createdAt: new Date(Date.now() - 5 * 864e5).toISOString(), createdBy: 'admin', lastUsedAt: new Date(Date.now() - 3600e3).toISOString() },
+];
+app.get('/api/tokens', (_req, res) => res.json(tokens));
+app.post('/api/tokens', (req, res) => {
+  const raw = 'dfp_' + Math.random().toString(16).slice(2).padEnd(48, '0').slice(0, 48);
+  const entry = { id: 't-' + (tokens.length + 1), name: (req.body && req.body.name) || 'unbenannt',
+    username: (req.body && req.body.username) || '*', tokenPrefix: raw.slice(0, 10),
+    createdAt: new Date().toISOString(), createdBy: 'admin', lastUsedAt: null };
+  tokens.push(entry);
+  res.status(201).json({ token: raw, ...entry });
+});
+app.delete('/api/tokens/:id', (req, res) => {
+  tokens = tokens.filter((t) => t.id !== req.params.id);
+  res.json({ status: 'ok' });
+});
+
 app.get('/api/users', (_req, res) => res.json(users));
 app.get('/api/sessions', (_req, res) => res.json(sessions));
 app.get('/api/vms', (_req, res) => res.json(vms.map(pub)));
