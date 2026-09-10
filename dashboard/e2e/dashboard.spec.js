@@ -94,9 +94,12 @@ test('Übersicht: System-Status, Kapazität, Nutzung, Orphans', async ({ page })
   await expect(page.locator('#orphansBox')).toContainText('deskforge-alt-950');
 });
 
-test('Audit-Log ist befüllt', async ({ page }) => {
+test('Audit-Log ist befüllt und admin.connect ist hervorgehoben', async ({ page }) => {
   await nav(page, 'audit');
   await expect(page.locator('#auditTableBody tr')).not.toHaveCount(0);
+  const hl = page.locator('#auditTableBody tr.audit-connect');
+  await expect(hl.first()).toBeVisible();
+  await expect(hl.first()).toContainText('admin.connect');
 });
 
 test('VMs: Admin kann sich für Wartung mit fremder Sitzung verbinden (Zugriff wird protokolliert)', async ({ page }) => {

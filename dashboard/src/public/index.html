@@ -33,6 +33,10 @@
     th[data-sort][aria-sort="ascending"]::after { content: " \25B2"; }
     th[data-sort][aria-sort="descending"]::after { content: " \25BC"; }
 
+    /* Wartungszugriffe (admin.connect) im Audit-Log hervorheben */
+    tr.audit-connect { background: rgba(245, 158, 11, .12); }
+    tr.audit-connect td:nth-child(2) { color: #fbbf24; font-weight: 600; }
+
     /* Sidebar-Navigation */
     .nav-item {
       display: flex; align-items: center; gap: .7rem; width: 100%;

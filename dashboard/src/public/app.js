@@ -464,14 +464,17 @@ async function loadAudit(reset) {
   if (reset) { auditBefore = null; el('auditTableBody').innerHTML = rowLoading(5); }
   try {
     const data = await fetchJson('/api/audit?' + new URLSearchParams(auditBefore ? { before: auditBefore } : {}));
-    const rows = data.entries.map((a) => `
-      <tr>
+    const rows = data.entries.map((a) => {
+      const connect = a.action === 'admin.connect';
+      return `
+      <tr class="${connect ? 'audit-connect' : ''}">
         <td class="py-2 whitespace-nowrap">${esc(formatDate(a.ts))}</td>
-        <td class="py-2">${esc(a.action)}</td>
+        <td class="py-2">${connect ? '<i class="fa-solid fa-user-lock mr-1.5"></i>' : ''}${esc(a.action)}</td>
         <td class="py-2">${esc(a.actor)}</td>
         <td class="py-2 text-slate-400">${esc([a.vmid, a.username].filter(Boolean).join(' / '))}</td>
         <td class="py-2 text-slate-400">${esc(a.detail || '')}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     if (reset) el('auditTableBody').innerHTML = rows || rowEmpty(5, 'Noch keine Einträge.');
     else el('auditTableBody').insertAdjacentHTML('beforeend', rows);
     auditBefore = data.nextBefore;

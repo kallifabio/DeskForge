@@ -55,6 +55,7 @@ let vms = [
 ];
 let announcement = { text: '', level: 'info', updatedAt: null };
 const audit = [
+  { ts: new Date(Date.now() - 90 * 60e3).toISOString(), action: 'admin.connect', actor: 'admin', vmid: 102, username: 'bob', detail: 'Wartungszugriff auf fremde Sitzung' },
   { ts: new Date(Date.now() - 3 * 3600e3).toISOString(), action: 'assign', actor: 'alice', vmid: 101, username: 'alice', detail: null },
   { ts: new Date(Date.now() - 26 * 3600e3).toISOString(), action: 'assign', actor: 'admin', vmid: 102, username: 'bob', detail: null },
   { ts: new Date(Date.now() - 20 * 3600e3).toISOString(), action: 'deprovision', actor: 'system:idle', vmid: 99, username: 'carol', detail: null },
