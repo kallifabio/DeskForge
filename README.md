@@ -1,5 +1,15 @@
 # DeskForge: Selbst gehostete VDI-Umgebung ohne Lizenzkosten
 
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4.x-000000?style=flat&logo=express&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
+![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-9-E57000?style=flat&logo=proxmox&logoColor=white)
+![Authentik](https://img.shields.io/badge/Authentik-SSO%20%2F%20OIDC-FD4B2D?style=flat&logo=authentik&logoColor=white)
+![Kasm Workspaces](https://img.shields.io/badge/Kasm-Workspaces-1D9BF0?style=flat)
+![Docker Compose](https://img.shields.io/badge/Docker%20Compose-infra-2496ED?style=flat&logo=docker&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-node%20--test-4B32C3?style=flat)
+![License](https://img.shields.io/badge/license-not%20specified-lightgrey?style=flat)
+
 Setup-/Deploy-Automatisierung + automatisches Windows-VM-Provisioning
 (mit VM-Pool, Idle-Auto-Abbau, Nutzerprofilen) + rollenbasiertes
 Verwaltungs-Dashboard (Tailwind CSS + Font Awesome) für eine
