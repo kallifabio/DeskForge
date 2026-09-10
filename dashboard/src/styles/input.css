@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* Vendored Libraries (Font Awesome, SweetAlert2) nicht nach Utility-
+   Klassen durchsuchen - sonst generiert Tailwind Cruft wie .container
+   aus Fremd-CSS. */
+@source not "../public/vendor";
