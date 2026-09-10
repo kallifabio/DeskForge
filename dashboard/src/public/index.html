@@ -8,6 +8,28 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234f46e5'/%3E%3Crect x='3' y='4' width='10' height='6.5' rx='1' fill='white'/%3E%3Crect x='6' y='11.5' width='4' height='1.5' rx='.5' fill='white'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="tailwind.css" />
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
+  <style>
+    /* Optionales helles Farbschema. Das Markup ist dunkel gestaltet
+       (Tailwind slate-*), hier werden nur die verwendeten Flächen-/
+       Textfarben unter html.theme-light umgefärbt. */
+    html.theme-light body { background: #eef2f6; color: #0f172a; }
+    html.theme-light .bg-slate-950 { background: #eef2f6 !important; }
+    html.theme-light .bg-slate-900 { background: #ffffff !important; }
+    html.theme-light .bg-slate-800 { background: #e2e8f0 !important; }
+    html.theme-light .border-slate-800 { border-color: #e2e8f0 !important; }
+    html.theme-light .border-slate-700 { border-color: #cbd5e1 !important; }
+    html.theme-light .divide-slate-800 > * { border-color: #e2e8f0 !important; }
+    html.theme-light .text-slate-100 { color: #0f172a !important; }
+    html.theme-light .text-slate-400 { color: #475569 !important; }
+    html.theme-light .text-slate-500 { color: #64748b !important; }
+    html.theme-light .placeholder-slate-500::placeholder { color: #94a3b8 !important; }
+    .capbar { height: 6px; border-radius: 999px; background: rgba(148,163,184,.25); overflow: hidden; }
+    .capbar > span { display: block; height: 100%; background: #6366f1; }
+    th[data-sort] { cursor: pointer; user-select: none; }
+    th[data-sort]::after { content: ""; }
+    th[data-sort][aria-sort="ascending"]::after { content: " \25B2"; }
+    th[data-sort][aria-sort="descending"]::after { content: " \25BC"; }
+  </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
   <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800">
@@ -16,7 +38,14 @@
       DeskForge
     </h1>
     <div class="flex items-center gap-4 text-sm text-slate-400">
+      <span id="liveDot" title="Live-Verbindung" class="hidden items-center gap-1.5">
+        <i class="fa-solid fa-circle text-[8px]"></i> Live
+      </span>
       <span id="whoami" class="flex items-center gap-2"></span>
+      <button id="themeToggle" type="button" title="Farbschema umschalten"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
+        <i class="fa-solid fa-circle-half-stroke"></i>
+      </button>
       <a href="/auth/logout" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 hover:bg-slate-800 transition">
         <i class="fa-solid fa-right-from-bracket"></i> Abmelden
       </a>
@@ -25,24 +54,39 @@
 
   <main class="max-w-4xl mx-auto p-6 grid gap-6">
 
-    <!-- Ladezustand beim ersten Aufruf -->
     <div id="appLoading" class="text-sm text-slate-400 flex items-center gap-2">
       <i class="fa-solid fa-spinner fa-spin"></i> Dashboard wird geladen...
     </div>
 
-    <!-- Sichtbar nur bei einem echten Fehler (kein 401) -->
     <div id="appError" hidden class="bg-rose-950 border border-rose-800 text-rose-200 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span id="appErrorText"></span>
     </div>
 
-    <!-- Selbstbedienung: für jeden angemeldeten Nutzer sichtbar -->
+    <!-- Ankündigungsbanner (von Admins gesetzt) -->
+    <div id="announcementBar" hidden class="rounded-lg px-4 py-3 text-sm flex items-start gap-2 border">
+      <i class="fa-solid fa-bullhorn mt-0.5"></i>
+      <span id="announcementText" class="flex-1"></span>
+    </div>
+
+    <!-- Selbstbedienung -->
     <section id="selfService" hidden class="bg-slate-900 border border-slate-800 rounded-xl p-6">
       <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
         <i class="fa-solid fa-desktop"></i> Meine VDI-Sitzung
       </h2>
-      <div id="myVmStatus" class="text-sm text-slate-400 mb-3">Lädt...</div>
-      <div class="flex gap-3">
+      <div id="myVmStatus" class="text-sm text-slate-400 mb-1">Lädt...</div>
+      <div id="idleInfo" hidden class="text-xs text-slate-500 mb-3"></div>
+      <div class="flex flex-wrap gap-3">
+        <a id="connectBtn" hidden target="_blank" rel="noopener"
+           class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> Verbinden
+        </a>
+        <button id="extendBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-hourglass-half"></i> Sitzung verlängern
+        </button>
+        <button id="rebootBtn" hidden class="inline-flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition px-4 py-2 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-rotate-right"></i> Neu starten
+        </button>
         <button id="requestVmBtn" hidden class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
           <i class="fa-solid fa-plus"></i> VM anfordern
         </button>
@@ -50,10 +94,72 @@
           <i class="fa-solid fa-power-off"></i> Sitzung beenden
         </button>
       </div>
+
+      <details id="historyBox" class="mt-4 text-sm">
+        <summary class="cursor-pointer text-slate-400 hover:text-slate-300">Meine letzten Sitzungen</summary>
+        <ul id="historyList" class="mt-2 text-slate-400 text-xs space-y-1"></ul>
+      </details>
     </section>
 
-    <!-- Ab hier nur für Mitglieder der Admin-Gruppe sichtbar -->
+    <!-- Admin -->
     <div id="adminSections" hidden class="grid gap-6">
+
+      <!-- System-Status + Kapazität nebeneinander -->
+      <div class="grid gap-6 md:grid-cols-2">
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-heart-pulse"></i> System-Status
+          </h2>
+          <ul id="statusList" class="text-sm space-y-2 text-slate-400"></ul>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-gauge-high"></i> Host-Kapazität
+          </h2>
+          <div id="capacityBox" class="text-sm text-slate-400 space-y-3">Lädt...</div>
+        </section>
+      </div>
+
+      <!-- Pool-Steuerung + Ankündigung -->
+      <div class="grid gap-6 md:grid-cols-2">
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-layer-group"></i> VM-Pool
+          </h2>
+          <p id="poolInfo" class="text-sm text-slate-400 mb-3">Lädt...</p>
+          <form id="poolForm" class="flex gap-3 items-center">
+            <label class="text-sm text-slate-400" for="poolSize">Ziel</label>
+            <input id="poolSize" type="number" min="0" max="50"
+                   class="w-20 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+              Übernehmen
+            </button>
+          </form>
+          <p id="poolStatus" class="text-xs text-slate-500 mt-2"></p>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-bullhorn"></i> Ankündigungsbanner
+          </h2>
+          <form id="announceForm" class="space-y-2">
+            <textarea id="announceText" rows="2" maxlength="500" placeholder="Leer lassen = Banner ausblenden"
+                      class="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+            <div class="flex gap-3 items-center">
+              <select id="announceLevel" class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm">
+                <option value="info">Info</option>
+                <option value="warning">Warnung</option>
+                <option value="critical">Kritisch</option>
+              </select>
+              <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-3 py-1.5 rounded-md text-sm font-medium">
+                Speichern
+              </button>
+              <span id="announceStatus" class="text-xs text-slate-500"></span>
+            </div>
+          </form>
+        </section>
+      </div>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
@@ -70,69 +176,114 @@
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
             <i class="fa-solid fa-users"></i> Nutzer (LDAP)
           </h2>
-          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="users">
-            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-          </button>
+          <div class="flex items-center gap-2">
+            <input data-filter="users" type="search" placeholder="Filtern..."
+                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="users">
+              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+            </button>
+          </div>
         </div>
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-400 text-left border-b border-slate-800">
-              <th scope="col" class="py-2 font-medium">Benutzer-ID</th>
-              <th scope="col" class="py-2 font-medium">Name</th>
-              <th scope="col" class="py-2 font-medium">E-Mail</th>
-            </tr>
-          </thead>
-          <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" data-table="users">
+            <thead>
+              <tr class="text-slate-400 text-left border-b border-slate-800">
+                <th scope="col" class="py-2 font-medium" data-sort="uid">Benutzer-ID</th>
+                <th scope="col" class="py-2 font-medium" data-sort="name">Name</th>
+                <th scope="col" class="py-2 font-medium" data-sort="email">E-Mail</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
             <i class="fa-solid fa-desktop"></i> Aktive Sitzungen (Kasm)
           </h2>
-          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="sessions">
-            <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
-          </button>
+          <div class="flex items-center gap-2">
+            <input data-filter="sessions" type="search" placeholder="Filtern..."
+                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="sessions">
+              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+            </button>
+          </div>
         </div>
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-400 text-left border-b border-slate-800">
-              <th scope="col" class="py-2 font-medium">Kasm-ID</th>
-              <th scope="col" class="py-2 font-medium">Nutzer</th>
-              <th scope="col" class="py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
-        </table>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" data-table="sessions">
+            <thead>
+              <tr class="text-slate-400 text-left border-b border-slate-800">
+                <th scope="col" class="py-2 font-medium" data-sort="kasm_id">Kasm-ID</th>
+                <th scope="col" class="py-2 font-medium" data-sort="user">Nutzer</th>
+                <th scope="col" class="py-2 font-medium" data-sort="status">Status</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsTableBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-server"></i> Zugewiesene VMs (Proxmox)
+          </h2>
+          <div class="flex items-center gap-2">
+            <input data-filter="vms" type="search" placeholder="Filtern..."
+                   class="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">
+              <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" data-table="vms">
+            <thead>
+              <tr class="text-slate-400 text-left border-b border-slate-800">
+                <th scope="col" class="py-2 font-medium" data-sort="vmid">VMID</th>
+                <th scope="col" class="py-2 font-medium" data-sort="username">Nutzer</th>
+                <th scope="col" class="py-2 font-medium" data-sort="ip">IP</th>
+                <th scope="col" class="py-2 font-medium" data-sort="assignedAt">Zugewiesen seit</th>
+                <th scope="col" class="py-2 font-medium" data-sort="reapAt">Abbau um</th>
+                <th scope="col" class="py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody id="vmsTableBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+        <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 flex items-center gap-2">
-            <i class="fa-solid fa-server"></i> Zugewiesene VMs (Proxmox)
+            <i class="fa-solid fa-clock-rotate-left"></i> Audit-Log
           </h2>
-          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="vms">
+          <button class="text-indigo-400 hover:text-indigo-300 text-sm inline-flex items-center gap-1.5" data-refresh="audit">
             <i class="fa-solid fa-arrows-rotate"></i> Aktualisieren
           </button>
         </div>
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-slate-400 text-left border-b border-slate-800">
-              <th scope="col" class="py-2 font-medium">VMID</th>
-              <th scope="col" class="py-2 font-medium">Nutzer</th>
-              <th scope="col" class="py-2 font-medium">IP</th>
-              <th scope="col" class="py-2 font-medium">Zugewiesen seit</th>
-              <th scope="col" class="py-2 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody id="vmsTableBody" class="divide-y divide-slate-800"></tbody>
-        </table>
-        <p id="vmsStatus" class="text-sm text-rose-400 mt-3" hidden></p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-slate-400 text-left border-b border-slate-800">
+                <th scope="col" class="py-2 font-medium">Zeit</th>
+                <th scope="col" class="py-2 font-medium">Aktion</th>
+                <th scope="col" class="py-2 font-medium">Auslöser</th>
+                <th scope="col" class="py-2 font-medium">VM / Nutzer</th>
+                <th scope="col" class="py-2 font-medium">Detail</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+        <button id="auditMore" hidden class="mt-3 text-indigo-400 hover:text-indigo-300 text-sm">Mehr laden</button>
       </section>
 
     </div>

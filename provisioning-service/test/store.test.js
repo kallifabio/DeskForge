@@ -11,7 +11,34 @@ function tempStatePath() {
 
 test('StateStore legt eine leere Datei an, falls noch keine existiert', () => {
   const store = new StateStore(tempStatePath());
-  assert.deepEqual(store.read(), { vms: {} });
+  assert.deepEqual(store.read(), {
+    vms: {},
+    audit: [],
+    history: [],
+    announcement: { text: '', level: 'info', updatedAt: null },
+    settings: {},
+  });
+});
+
+test('StateStore.read migriert eine alte state.json (nur { vms }) sanft', () => {
+  const p = tempStatePath();
+  fs.writeFileSync(p, JSON.stringify({ vms: { 7: { vmid: 7, status: 'pool' } } }));
+  const store = new StateStore(p);
+  const data = store.read();
+  assert.equal(data.vms[7].status, 'pool');
+  assert.deepEqual(data.audit, []);
+  assert.deepEqual(data.history, []);
+  assert.equal(data.announcement.level, 'info');
+});
+
+test('StateStore.appendAudit begrenzt die Liste auf MAX_AUDIT', async () => {
+  const store = new StateStore(tempStatePath());
+  for (let i = 0; i < StateStore.MAX_AUDIT + 25; i++) {
+    await store.appendAudit({ ts: new Date().toISOString(), action: 'test', actor: 'x', detail: i });
+  }
+  const audit = store.read().audit;
+  assert.equal(audit.length, StateStore.MAX_AUDIT);
+  assert.equal(audit[audit.length - 1].detail, StateStore.MAX_AUDIT + 24);
 });
 
 test('StateStore.update persistiert Änderungen', async () => {

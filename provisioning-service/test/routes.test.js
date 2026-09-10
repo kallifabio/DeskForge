@@ -110,3 +110,113 @@ test('GET /vms ohne API-Key wird abgelehnt', withServer(async ({ baseUrl }) => {
   const res = await fetch(`${baseUrl}/vms`);
   assert.equal(res.status, 401);
 }));
+
+// ---- Phase-1-Erweiterungen -------------------------------------------
+
+const KEY = { 'X-API-Key': VALID_ENV.PROVISIONING_API_KEY };
+
+test('GET /audit ohne API-Key wird abgelehnt', withServer(async ({ baseUrl }) => {
+  assert.equal((await fetch(`${baseUrl}/audit`)).status, 401);
+}));
+
+test('GET /audit liefert leere, paginierte Liste', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/audit`, { headers: KEY });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { entries: [], nextBefore: null, total: 0 });
+}));
+
+test('GET /announcement liefert Default; PUT setzt und persistiert', withServer(async ({ baseUrl }) => {
+  let res = await fetch(`${baseUrl}/announcement`, { headers: KEY });
+  assert.deepEqual((await res.json()), { text: '', level: 'info', updatedAt: null });
+
+  res = await fetch(`${baseUrl}/announcement`, {
+    method: 'PUT',
+    headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'Wartung heute 18 Uhr', level: 'warning' }),
+  });
+  assert.equal(res.status, 200);
+  const saved = await res.json();
+  assert.equal(saved.text, 'Wartung heute 18 Uhr');
+  assert.equal(saved.level, 'warning');
+
+  res = await fetch(`${baseUrl}/announcement`, { headers: KEY });
+  assert.equal((await res.json()).text, 'Wartung heute 18 Uhr');
+}));
+
+test('PUT /announcement lehnt zu langen Text mit 400 ab', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/announcement`, {
+    method: 'PUT',
+    headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'x'.repeat(501) }),
+  });
+  assert.equal(res.status, 400);
+}));
+
+test('GET/PATCH /pool: Override zur Laufzeit', withServer(async ({ baseUrl }) => {
+  let res = await fetch(`${baseUrl}/pool`, { headers: KEY });
+  assert.deepEqual(await res.json(), { target: 0, configured: 0, override: null, current: 0 });
+
+  res = await fetch(`${baseUrl}/pool`, {
+    method: 'PATCH',
+    headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ size: 3 }),
+  });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).target, 3);
+
+  res = await fetch(`${baseUrl}/pool`, { headers: KEY });
+  assert.equal((await res.json()).target, 3);
+}));
+
+test('PATCH /pool lehnt ungültige Größe ab', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/pool`, {
+    method: 'PATCH',
+    headers: { ...KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ size: -1 }),
+  });
+  assert.equal(res.status, 400);
+}));
+
+test('GET /history/:username liefert leere Liste', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/history/alice`, { headers: KEY });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), []);
+}));
+
+test('POST /vms/:username/keepalive für unbekannten Nutzer -> 404', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/vms/niemand/keepalive`, { method: 'POST', headers: KEY });
+  assert.equal(res.status, 404);
+}));
+
+test('POST /vms/:username/reboot für unbekannten Nutzer -> 404', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/vms/niemand/reboot`, { method: 'POST', headers: KEY });
+  assert.equal(res.status, 404);
+}));
+
+test('GET /capacity degradiert sauber, wenn Proxmox nicht erreichbar ist', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/capacity`, { headers: KEY });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.node, null);
+  assert.ok(body.nodeError);
+  assert.deepEqual(body.counts, { assigned: 0, pool: 0, claiming: 0, deprovisioning: 0 });
+}));
+
+test('GET /metrics liefert Prometheus-Text', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/metrics`, { headers: KEY });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/plain/);
+  const text = await res.text();
+  assert.match(text, /deskforge_pool_target 0/);
+  assert.match(text, /deskforge_vms\{status="assigned"\} 0/);
+}));
+
+test('GET /status meldet ok:false, wenn Proxmox und Kasm nicht erreichbar sind', withServer(async ({ baseUrl }) => {
+  const res = await fetch(`${baseUrl}/status`, { headers: KEY });
+  assert.equal(res.status, 207);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.checks.proxmox.ok, false);
+  assert.equal(body.checks.kasm.ok, false);
+  assert.equal(body.checks.pool.target, 0);
+}));

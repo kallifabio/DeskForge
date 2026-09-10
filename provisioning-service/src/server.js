@@ -28,7 +28,7 @@ function createApp() {
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
   app.use(buildProvisionRouter({ store, proxmox, kasm, mutex, config, logger }));
-  app.use(buildVmsRouter({ store, config }));
+  app.use(buildVmsRouter({ store, proxmox, kasm, config, logger }));
   app.use(buildSessionsRouter({ kasm, config }));
 
   const poolInterval = startPoolMaintainer({ store, proxmox, mutex, config, logger });

@@ -85,12 +85,114 @@ app.post('/api/my-vm', requireAuth, provisionLimiter, async (req, res) => {
 
 app.delete('/api/my-vm', requireAuth, async (req, res) => {
   try {
-    const result = await provisioning.stopVm({ username: req.session.user.username });
+    const result = await provisioning.stopVm(
+      { username: req.session.user.username },
+      req.session.user.username
+    );
     res.json(result);
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
     res.status(err.response?.status || 502).json(detail);
   }
+});
+
+// Idle-Timer zurücksetzen ("Sitzung verlängern").
+app.post('/api/my-vm/keepalive', requireAuth, async (req, res) => {
+  try {
+    res.json(await provisioning.keepAlive(req.session.user.username, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+// Weicher Neustart der eigenen VM.
+app.post('/api/my-vm/reboot', requireAuth, provisionLimiter, async (req, res) => {
+  try {
+    res.json(await provisioning.rebootMyVm(req.session.user.username, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.get('/api/my-history', requireAuth, async (req, res) => {
+  try {
+    res.json(await provisioning.myHistory(req.session.user.username));
+  } catch (err) {
+    res.status(502).json({ error: `Historie nicht abrufbar: ${err.message}` });
+  }
+});
+
+// Ankündigungsbanner: lesen darf jeder angemeldete Nutzer.
+app.get('/api/announcement', requireAuth, async (_req, res) => {
+  try {
+    res.json(await provisioning.getAnnouncement());
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---- Live-Updates (Server-Sent Events) -------------------------------
+
+async function buildEventPayload(user) {
+  const [myVm, announcement] = await Promise.allSettled([
+    provisioning.getMyVm(user.username),
+    provisioning.getAnnouncement(),
+  ]);
+  const payload = {
+    ts: new Date().toISOString(),
+    myVm: myVm.status === 'fulfilled' ? myVm.value : null,
+    announcement: announcement.status === 'fulfilled' ? announcement.value : null,
+  };
+  if (user.isAdmin) {
+    const [vms, status, capacity] = await Promise.allSettled([
+      provisioning.listAllVms(),
+      provisioning.deepStatus(),
+      provisioning.capacity(),
+    ]);
+    payload.admin = {
+      vms: vms.status === 'fulfilled' ? vms.value : null,
+      status: status.status === 'fulfilled' ? status.value : null,
+      capacity: capacity.status === 'fulfilled' ? capacity.value : null,
+    };
+  }
+  return payload;
+}
+
+app.get('/api/events', requireAuth, async (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  const user = req.session.user;
+  let closed = false;
+
+  const push = async () => {
+    if (closed) return;
+    try {
+      const payload = await buildEventPayload(user);
+      res.write(`event: state\ndata: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+    }
+  };
+
+  await push();
+  const dataInterval = setInterval(push, 5000);
+  const keepAliveInterval = setInterval(() => {
+    if (!closed) res.write(': keepalive\n\n');
+  }, 25000);
+
+  req.on('close', () => {
+    closed = true;
+    clearInterval(dataInterval);
+    clearInterval(keepAliveInterval);
+  });
 });
 
 // ---- Administration (nur AUTHENTIK_ADMIN_GROUP) -----------------------
@@ -123,7 +225,7 @@ app.post('/api/vms/provision', requireAuth, requireAdmin, provisionLimiter, asyn
   const { username } = req.body || {};
   if (!username) return res.status(400).json({ error: 'username fehlt' });
   try {
-    res.json(await provisioning.requestVm(username));
+    res.json(await provisioning.requestVm(username, req.session.user.username));
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
     res.status(err.response?.status || 502).json(detail);
@@ -132,7 +234,61 @@ app.post('/api/vms/provision', requireAuth, requireAdmin, provisionLimiter, asyn
 
 app.delete('/api/vms/:vmid', requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json(await provisioning.stopVm({ vmid: Number(req.params.vmid) }));
+    res.json(await provisioning.stopVm({ vmid: Number(req.params.vmid) }, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+// ---- Admin: Audit, Kapazität, System-Status, Pool, Ankündigung -------
+
+app.get('/api/audit', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await provisioning.listAudit({ limit: req.query.limit, before: req.query.before }));
+  } catch (err) {
+    res.status(502).json({ error: `Audit-Log nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.get('/api/capacity', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.capacity());
+  } catch (err) {
+    res.status(502).json({ error: `Kapazität nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.get('/api/status', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.deepStatus());
+  } catch (err) {
+    res.status(502).json({ error: `System-Status nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.get('/api/pool', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await provisioning.getPool());
+  } catch (err) {
+    res.status(502).json({ error: `Pool-Info nicht abrufbar: ${err.message}` });
+  }
+});
+
+app.patch('/api/pool', requireAuth, requireAdmin, async (req, res) => {
+  const size = Number(req.body && req.body.size);
+  try {
+    res.json(await provisioning.setPool(size, req.session.user.username));
+  } catch (err) {
+    const detail = err.response ? err.response.data : { error: err.message };
+    res.status(err.response?.status || 502).json(detail);
+  }
+});
+
+app.put('/api/announcement', requireAuth, requireAdmin, async (req, res) => {
+  const { text, level } = req.body || {};
+  try {
+    res.json(await provisioning.setAnnouncement({ text, level }, req.session.user.username));
   } catch (err) {
     const detail = err.response ? err.response.data : { error: err.message };
     res.status(err.response?.status || 502).json(detail);

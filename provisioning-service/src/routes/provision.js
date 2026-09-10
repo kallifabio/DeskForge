@@ -83,7 +83,10 @@ function buildRouter({ store, proxmox, kasm, mutex, config, logger }) {
         });
       }
 
-      const result = await assignVmToUser({ store, proxmox, kasm, config, logger, vmid, username });
+      const result = await assignVmToUser({
+        store, proxmox, kasm, config, logger, vmid, username,
+        actor: req.get('X-Actor') || username,
+      });
 
       res.json({ status: 'ok', reused: false, ...result });
 
@@ -122,7 +125,10 @@ function buildRouter({ store, proxmox, kasm, mutex, config, logger }) {
     }
 
     try {
-      await deprovisionVm({ store, proxmox, kasm, logger, vmid: targetVmid });
+      await deprovisionVm({
+        store, proxmox, kasm, logger, vmid: targetVmid,
+        actor: req.get('X-Actor') || (username ? username : 'admin'),
+      });
       res.json({ status: 'ok', vmid: targetVmid });
     } catch (err) {
       logger.error({ vmid: targetVmid, err: err.message }, 'Deprovisioning fehlgeschlagen');

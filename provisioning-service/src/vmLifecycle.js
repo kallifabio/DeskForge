@@ -6,6 +6,8 @@
 // den HTTP-Routen als auch von den Hintergrund-Jobs (Pool-Wartung,
 // Idle-Reaper) genutzt, damit dieselbe Logik nicht zweimal existiert.
 
+const { auditEntry } = require('../../shared/apiSchema');
+
 // Vergibt eine VMID und stößt das Klonen an - NUR dieser kurze Abschnitt
 // läuft unter dem Mutex, damit zwei gleichzeitige Anfragen nicht dieselbe
 // VMID bekommen. Das eigentliche (mehrminütige) Warten auf den
@@ -60,7 +62,7 @@ async function createPoolVm({ store, proxmox, mutex, config, logger }) {
 
 // Registriert eine (aus dem Pool entnommene oder frisch geklonte) VM bei
 // Kasm und markiert sie im State Store als "assigned".
-async function assignVmToUser({ store, proxmox, kasm, config, logger, vmid, username }) {
+async function assignVmToUser({ store, proxmox, kasm, config, logger, vmid, username, actor }) {
   const data = store.read();
   const vm = data.vms[vmid];
   if (!vm) throw new Error(`VM ${vmid} nicht im Bestand gefunden`);
@@ -86,16 +88,23 @@ async function assignVmToUser({ store, proxmox, kasm, config, logger, vmid, user
     );
   }
 
+  const nowIso = new Date().toISOString();
   await store.update((d) => {
     d.vms[vmid] = {
       ...d.vms[vmid],
       status: 'assigned',
       username,
       kasmServerId: serverId,
-      assignedAt: new Date().toISOString(),
-      lastActiveCheck: new Date().toISOString(),
+      assignedAt: nowIso,
+      idleSince: nowIso,
+      keepaliveUntil: null,
+      lastActiveCheck: nowIso,
     };
   });
+
+  await store.appendAudit(
+    auditEntry({ action: 'assign', actor: actor || username, vmid, username })
+  );
 
   return { vmid, ip: vm.ip, kasmServerId: serverId };
 }
@@ -103,7 +112,7 @@ async function assignVmToUser({ store, proxmox, kasm, config, logger, vmid, user
 // Baut eine VM vollständig ab: bei Kasm deregistrieren, in Proxmox
 // stoppen und löschen, aus dem State Store entfernen. Wird sowohl vom
 // "/deprovision"-Endpunkt als auch vom Idle-Reaper genutzt.
-async function deprovisionVm({ store, proxmox, kasm, logger, vmid }) {
+async function deprovisionVm({ store, proxmox, kasm, logger, vmid, actor = 'system' }) {
   const data = store.read();
   const vm = data.vms[vmid];
   if (!vm) {
@@ -134,7 +143,27 @@ async function deprovisionVm({ store, proxmox, kasm, logger, vmid }) {
     delete d.vms[vmid];
   });
 
-  logger.info({ vmid }, 'VM vollständig abgebaut');
+  // Nur zugewiesene VMs erzeugen einen Historien-Eintrag (Pool-VMs, die
+  // nie einem Nutzer gehörten, sind für die Sitzungs-Historie irrelevant).
+  if (vm.username && vm.assignedAt) {
+    const endedAt = new Date().toISOString();
+    const durationMin = Math.round(
+      (Date.parse(endedAt) - Date.parse(vm.assignedAt)) / 60_000
+    );
+    await store.appendHistory({
+      vmid,
+      username: vm.username,
+      assignedAt: vm.assignedAt,
+      endedAt,
+      durationMinutes: durationMin,
+      endedBy: actor,
+    });
+  }
+  await store.appendAudit(
+    auditEntry({ action: 'deprovision', actor, vmid, username: vm.username || null })
+  );
+
+  logger.info({ vmid, actor }, 'VM vollständig abgebaut');
 }
 
 module.exports = { allocateAndCloneVm, createPoolVm, assignVmToUser, deprovisionVm };

@@ -11,11 +11,15 @@ const { createPoolVm } = require('../vmLifecycle');
 async function ensurePoolSize({ store, proxmox, mutex, config, logger }) {
   const data = store.read();
   const poolCount = Object.values(data.vms).filter((v) => v.status === 'pool').length;
-  const deficit = config.pool.size - poolCount;
+  // Laufzeit-Override aus dem Dashboard (PATCH /pool) schlägt die .env.
+  const target = Number.isInteger(data.settings.poolSizeOverride)
+    ? data.settings.poolSizeOverride
+    : config.pool.size;
+  const deficit = target - poolCount;
 
   if (deficit <= 0) return;
 
-  logger.info({ deficit, poolSize: config.pool.size }, 'Fülle VM-Pool auf');
+  logger.info({ deficit, poolSize: target }, 'Fülle VM-Pool auf');
   for (let i = 0; i < deficit; i++) {
     try {
       await createPoolVm({ store, proxmox, mutex, config, logger });

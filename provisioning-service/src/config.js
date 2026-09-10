@@ -27,6 +27,10 @@ const schema = z.object({
   KASM_API_KEY: z.string().min(1),
   KASM_API_KEY_SECRET: z.string().min(1),
   KASM_ZONE_ID: z.string().min(1),
+  // Optional: ID des Kasm-Workspace/-Images, auf den der "Verbinden"-
+  // Button im Dashboard direkt verlinken soll (.../#/launch/<id>).
+  // Ohne Wert verweist der Link auf den Kasm-Staging-Screen.
+  KASM_WORKSPACE_ID: z.string().optional(),
   KASM_MAX_SIMULTANEOUS_SESSIONS: z.coerce.number().default(1),
   KASM_MAX_SIMULTANEOUS_USERS: z.coerce.number().default(1),
 
@@ -75,6 +79,7 @@ module.exports = {
     apiKey: env.KASM_API_KEY,
     apiKeySecret: env.KASM_API_KEY_SECRET,
     zoneId: env.KASM_ZONE_ID,
+    workspaceId: env.KASM_WORKSPACE_ID || null,
     maxSimultaneousSessions: env.KASM_MAX_SIMULTANEOUS_SESSIONS,
     maxSimultaneousUsers: env.KASM_MAX_SIMULTANEOUS_USERS,
   },

@@ -35,6 +35,9 @@ async function reapIdleVms({ store, proxmox, kasm, config, logger }) {
   for (const vm of Object.values(data.vms)) {
     if (vm.status !== 'assigned') continue;
 
+    // Nutzer hat "Sitzung verlängern" gedrückt - bis dahin nicht abbauen.
+    if (vm.keepaliveUntil && new Date(vm.keepaliveUntil).getTime() > now) continue;
+
     const active = await isSessionActive({ kasm, vm, logger });
     if (active) {
       await store.update((d) => {
@@ -49,7 +52,7 @@ async function reapIdleVms({ store, proxmox, kasm, config, logger }) {
     if (idleMinutes >= config.idle.timeoutMinutes) {
       logger.info({ vmid: vm.vmid, idleMinutes: Math.round(idleMinutes) }, 'VM ist im Leerlauf, wird abgebaut');
       try {
-        await deprovisionVm({ store, proxmox, kasm, logger, vmid: vm.vmid });
+        await deprovisionVm({ store, proxmox, kasm, logger, vmid: vm.vmid, actor: 'system:idle' });
       } catch (err) {
         logger.error({ vmid: vm.vmid, err: err.message }, 'Automatischer Abbau fehlgeschlagen');
       }

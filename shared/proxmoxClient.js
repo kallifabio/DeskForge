@@ -80,6 +80,34 @@ class ProxmoxClient {
     return res.data.data;
   }
 
+  // Weicher Neustart des Gasts (ACPI/Guest-Agent). Nutzt den
+  // reboot-Endpunkt statt stop+start, damit Windows sauber herunterfährt.
+  async rebootVm(vmid) {
+    const res = await this.client.post(`/nodes/${this.node}/qemu/${vmid}/status/reboot`);
+    await this.waitForTask(res.data.data);
+  }
+
+  // Auslastung des Proxmox-Nodes (CPU-Anteil 0..1, Speicher in Bytes,
+  // Storage-Belegung des Root-Storage). Für die Kapazitätsanzeige im
+  // Dashboard. Wirft nicht bei fehlenden Feldern - liefert dann null.
+  async getNodeStatus() {
+    const res = await this.client.get(`/nodes/${this.node}/status`);
+    const d = res.data.data || {};
+    const mem = d.memory || {};
+    const rootfs = d.rootfs || {};
+    return {
+      node: this.node,
+      cpu: typeof d.cpu === 'number' ? d.cpu : null,
+      cpuCount: d.cpuinfo && d.cpuinfo.cpus ? d.cpuinfo.cpus : null,
+      memTotal: mem.total ?? null,
+      memUsed: mem.used ?? null,
+      storageTotal: rootfs.total ?? null,
+      storageUsed: rootfs.used ?? null,
+      uptimeSeconds: d.uptime ?? null,
+      loadavg: Array.isArray(d.loadavg) ? d.loadavg : null,
+    };
+  }
+
   // Wartet, bis der QEMU Guest Agent im Windows-Gast antwortet.
   async waitForGuestAgent(vmid, { timeoutMs = 5 * 60 * 1000, intervalMs = 3000 } = {}) {
     const started = Date.now();

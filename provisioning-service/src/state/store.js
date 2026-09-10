@@ -32,7 +32,39 @@ class StateStore {
   }
 
   read() {
-    return JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+    // Sanfte Migration: ältere state.json-Dateien haben nur { vms }.
+    if (!raw.vms) raw.vms = {};
+    if (!Array.isArray(raw.audit)) raw.audit = [];
+    if (!Array.isArray(raw.history)) raw.history = [];
+    if (typeof raw.announcement !== 'object' || raw.announcement === null) {
+      raw.announcement = { text: '', level: 'info', updatedAt: null };
+    }
+    if (typeof raw.settings !== 'object' || raw.settings === null) {
+      raw.settings = {}; // z.B. { poolSizeOverride: <int> }
+    }
+    return raw;
+  }
+
+  // Hängt einen Audit-Eintrag an und begrenzt die Liste auf die letzten
+  // MAX_AUDIT Einträge (die state.json soll nicht unbegrenzt wachsen).
+  async appendAudit(entry) {
+    return this.update((data) => {
+      data.audit.push(entry);
+      if (data.audit.length > StateStore.MAX_AUDIT) {
+        data.audit = data.audit.slice(-StateStore.MAX_AUDIT);
+      }
+    });
+  }
+
+  // Sitzungs-Historie (eine Zeile je abgebauter Zuweisung).
+  async appendHistory(entry) {
+    return this.update((data) => {
+      data.history.push(entry);
+      if (data.history.length > StateStore.MAX_HISTORY) {
+        data.history = data.history.slice(-StateStore.MAX_HISTORY);
+      }
+    });
   }
 
   _writeSync(data) {
@@ -61,5 +93,8 @@ class StateStore {
     return task;
   }
 }
+
+StateStore.MAX_AUDIT = 1000;
+StateStore.MAX_HISTORY = 1000;
 
 module.exports = { StateStore };
