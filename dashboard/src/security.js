@@ -19,7 +19,11 @@ function buildHelmet() {
         'default-src': ["'self'"],
         'base-uri': ["'self'"],
         'script-src': ["'self'"],
-        'style-src': ["'self'"],
+        // 'unsafe-inline' nur für Styles: SweetAlert2 setzt zur Laufzeit
+        // inline style-Attribute (Animationen, Timerbalken), und der
+        // <style>-Block im <head> braucht es ebenfalls. script-src bleibt
+        // streng ('self'), das ist der für XSS entscheidende Vektor.
+        'style-src': ["'self'", "'unsafe-inline'"],
         'img-src': ["'self'", 'data:'],
         'font-src': ["'self'"],
         'connect-src': ["'self'"],

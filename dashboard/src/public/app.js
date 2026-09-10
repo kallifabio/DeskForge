@@ -62,6 +62,44 @@ function notify(title, body) {
   } catch (_) { /* egal */ }
 }
 
+// ---- Dialoge (SweetAlert2) --------------------------------------
+// Ersetzt window.alert()/confirm() überall. Fällt auf die nativen
+// Dialoge zurück, falls das Skript nicht geladen wurde.
+
+function swalBase() {
+  const light = document.documentElement.classList.contains('theme-light');
+  return {
+    background: light ? '#ffffff' : '#0f172a',
+    color: light ? '#0f172a' : '#e2e8f0',
+    confirmButtonColor: '#4f46e5',
+    cancelButtonColor: '#475569',
+  };
+}
+
+function sweetError(message, title = 'Fehler') {
+  if (typeof Swal === 'undefined') { window.alert(message); return Promise.resolve(); }
+  return Swal.fire({ ...swalBase(), icon: 'error', title, text: String(message || ''), confirmButtonText: 'OK' });
+}
+
+function sweetToast(message, icon = 'success') {
+  if (typeof Swal === 'undefined') return Promise.resolve();
+  return Swal.fire({
+    ...swalBase(), toast: true, position: 'top-end', icon,
+    title: String(message || ''), showConfirmButton: false, timer: 2600, timerProgressBar: true,
+  });
+}
+
+async function sweetConfirm(text, { title = 'Bestätigen', confirmText = 'Ja', danger = false } = {}) {
+  if (typeof Swal === 'undefined') return window.confirm(text);
+  const r = await Swal.fire({
+    ...swalBase(), icon: 'warning', title, text,
+    showCancelButton: true, reverseButtons: true, focusCancel: danger,
+    confirmButtonText: confirmText, cancelButtonText: 'Abbrechen',
+    confirmButtonColor: danger ? '#e11d48' : '#4f46e5',
+  });
+  return r.isConfirmed;
+}
+
 // ---- Farbschema --------------------------------------------------
 
 (function initTheme() {
@@ -203,7 +241,7 @@ async function loadTemplates() {
 }
 
 el('stopVmBtn').addEventListener('click', async () => {
-  if (!confirm('Sitzung wirklich beenden? Die VM wird abgebaut.')) return;
+  if (!(await sweetConfirm('Die VM wird abgebaut. Nicht gespeicherte Daten in der Sitzung gehen verloren.', { title: 'Sitzung beenden?', confirmText: 'Beenden', danger: true }))) return;
   const btn = el('stopVmBtn');
   busy(btn, true, '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Beende...');
   try {
@@ -230,7 +268,7 @@ el('extendBtn').addEventListener('click', async () => {
 });
 
 el('rebootBtn').addEventListener('click', async () => {
-  if (!confirm('VM neu starten? Laufende Programme in der Sitzung werden beendet.')) return;
+  if (!(await sweetConfirm('Laufende Programme in der Sitzung werden beendet.', { title: 'VM neu starten?', confirmText: 'Neu starten' }))) return;
   const btn = el('rebootBtn');
   busy(btn, true, '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Startet neu...');
   try {
@@ -274,7 +312,7 @@ async function loadMySchedules() {
         try {
           await fetchJson(`/api/my-schedules/${encodeURIComponent(btn.dataset.cancelSchedule)}`, { method: 'DELETE' });
           loadMySchedules();
-        } catch (err) { alert(err.message); btn.disabled = false; }
+        } catch (err) { sweetError(err.message); btn.disabled = false; }
       });
     });
   } catch (_) { /* optional */ }
@@ -293,7 +331,7 @@ el('scheduleForm').addEventListener('submit', async (e) => {
     el('scheduleWhen').value = '';
     loadMySchedules();
   } catch (err) {
-    alert(err.message);
+    sweetError(err.message);
   }
 });
 
@@ -485,12 +523,12 @@ async function loadTokens() {
       : rowEmpty(6, 'Keine Tokens.');
     tbody.querySelectorAll('[data-del-token]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Token widerrufen? Automatisierungen damit brechen sofort.')) return;
+        if (!(await sweetConfirm('Automatisierungen mit diesem Token brechen sofort.', { title: 'Token widerrufen?', confirmText: 'Widerrufen', danger: true }))) return;
         btn.disabled = true;
         try {
           await fetchJson(`/api/tokens/${encodeURIComponent(btn.dataset.delToken)}`, { method: 'DELETE' });
           loadTokens();
-        } catch (err) { alert(err.message); btn.disabled = false; }
+        } catch (err) { sweetError(err.message); btn.disabled = false; }
       });
     });
   } catch (err) {
@@ -514,7 +552,7 @@ el('tokenForm').addEventListener('submit', async (e) => {
     el('tokenUser').value = '';
     loadTokens();
   } catch (err) {
-    alert(err.message);
+    sweetError(err.message);
   }
 });
 
@@ -586,7 +624,7 @@ async function loadUserDetail(uid) {
 }
 
 el('bulkIdleBtn').addEventListener('click', async () => {
-  if (!confirm('Alle VMs ohne aktive Kasm-Sitzung jetzt abbauen?')) return;
+  if (!(await sweetConfirm('Alle VMs ohne aktive Kasm-Sitzung werden sofort abgebaut.', { title: 'Idle-VMs abbauen?', confirmText: 'Abbauen', danger: true }))) return;
   const btn = el('bulkIdleBtn');
   btn.disabled = true;
   try {
@@ -595,7 +633,8 @@ el('bulkIdleBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'deprovision-idle' }),
     });
-    setVmsStatus(`${r.count} VM(s) abgebaut.`);
+    setVmsStatus('');
+    sweetToast(`${r.count} VM(s) abgebaut.`);
     loadVms();
   } catch (err) {
     setVmsStatus(err.message);
@@ -652,12 +691,12 @@ function renderTable(name) {
       </tr>`).join('');
     tbody.querySelectorAll('[data-disconnect]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Sitzung trennen? Die VM bleibt bestehen, der Nutzer kann sich neu verbinden.')) return;
+        if (!(await sweetConfirm('Die VM bleibt bestehen, der Nutzer kann sich neu verbinden.', { title: 'Sitzung trennen?', confirmText: 'Trennen' }))) return;
         btn.disabled = true;
         try {
           await fetchJson(`/api/sessions/${encodeURIComponent(btn.dataset.disconnect)}/disconnect`, { method: 'POST' });
           loadSessions();
-        } catch (err) { alert(err.message); btn.disabled = false; }
+        } catch (err) { sweetError(err.message); btn.disabled = false; }
       });
     });
   } else {
@@ -676,7 +715,7 @@ function renderTable(name) {
       </tr>`).join('');
     tbody.querySelectorAll('[data-stop-vmid]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        if (!confirm(`VM ${btn.dataset.stopVmid} abbauen?`)) return;
+        if (!(await sweetConfirm(`VM ${btn.dataset.stopVmid} wird gestoppt und abgebaut.`, { title: 'VM abbauen?', confirmText: 'Abbauen', danger: true }))) return;
         btn.disabled = true;
         setVmsStatus('');
         try {

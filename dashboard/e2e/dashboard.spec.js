@@ -44,9 +44,24 @@ test('Meine Sitzung: laufende VM zeigt Verbinden/Verlängern/Neustart/Beenden', 
   await expect(page.locator('#idleInfo')).toContainText('Automatischer Abbau');
 });
 
-test('Meine Sitzung: beenden -> "keine VM" + VM anfordern', async ({ page }) => {
+// Hinweis: der dev-server hält den VM-Zustand im Speicher und wird von
+// allen Tests geteilt. Der "abbrechen"-Test läuft daher bewusst VOR dem
+// "beenden"-Test, der die VM serverseitig entfernt.
+test('Meine Sitzung: beenden abbrechen (SweetAlert2) lässt die VM laufen', async ({ page }) => {
   await nav(page, 'session');
   await page.locator('#stopVmBtn').click();
+  await expect(page.locator('.swal2-popup')).toBeVisible();
+  await page.locator('.swal2-cancel').click();
+  await expect(page.locator('.swal2-popup')).toBeHidden();
+  await expect(page.locator('#myVmStatus')).toContainText('Läuft');
+});
+
+test('Meine Sitzung: beenden -> SweetAlert2-Bestätigung -> "keine VM"', async ({ page }) => {
+  await nav(page, 'session');
+  await page.locator('#stopVmBtn').click();
+  await expect(page.locator('.swal2-popup')).toBeVisible();
+  await expect(page.locator('.swal2-title')).toHaveText('Sitzung beenden?');
+  await page.locator('.swal2-confirm').click();
   await expect(page.locator('#myVmStatus')).toContainText('keine VM', { timeout: 8000 });
   await expect(page.locator('#requestVmBtn')).toBeVisible();
   await expect(page.locator('#connectBtn')).toBeHidden();

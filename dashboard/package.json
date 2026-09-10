@@ -8,6 +8,7 @@
     "build:css": "tailwindcss -i ./src/styles/input.css -o ./src/public/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./src/styles/input.css -o ./src/public/tailwind.css --watch",
     "sync:fontawesome": "node scripts/sync-fontawesome.js",
+    "sync:sweetalert2": "node scripts/sync-sweetalert2.js",
     "prestart": "npm run build:css",
     "start": "node src/server.js",
     "dev": "node dev-server.js",
@@ -32,6 +33,7 @@
     "@fortawesome/fontawesome-free": "^7.3.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/cli": "^4.3.3",
+    "sweetalert2": "^11.26.25",
     "tailwindcss": "^4.3.3"
   }
 }
