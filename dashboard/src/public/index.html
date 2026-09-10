@@ -233,8 +233,8 @@
         <section data-view="provision" hidden>
           <h1 class="text-xl font-semibold mb-5">Für Nutzer bereitstellen</h1>
           <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-2xl">
-            <form id="adminProvisionForm" class="flex gap-3 flex-wrap">
-              <input id="adminProvisionUsername" type="text" placeholder="Benutzer-ID (z.B. alice)"
+            <form id="adminProvisionForm" class="flex gap-3 flex-wrap" autocomplete="off">
+              <input id="adminProvisionUsername" type="text" name="deskforge-provision-user" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" placeholder="Benutzer-ID (z.B. alice)"
                      class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               <select id="adminProvisionTemplate" hidden
                       class="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
@@ -390,10 +390,10 @@
             <h2 class="text-xs font-medium tracking-wide uppercase text-slate-400 mb-3 flex items-center gap-2">
               <i class="fa-solid fa-key"></i> API-Tokens
             </h2>
-            <form id="tokenForm" class="flex gap-3 flex-wrap mb-3">
-              <input id="tokenName" type="text" placeholder="Name (z.B. ci-runner)"
+            <form id="tokenForm" class="flex gap-3 flex-wrap mb-3" autocomplete="off">
+              <input id="tokenName" type="text" name="deskforge-token-name" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" placeholder="Name (z.B. ci-runner)"
                      class="flex-1 bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <input id="tokenUser" type="text" placeholder="Nutzer-Bindung (leer = *)"
+              <input id="tokenUser" type="text" name="deskforge-token-binding" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" placeholder="Nutzer-Bindung (leer = *)"
                      class="bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               <button type="submit" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition text-white px-4 py-2 rounded-md text-sm font-medium">
                 <i class="fa-solid fa-plus"></i> Erstellen
